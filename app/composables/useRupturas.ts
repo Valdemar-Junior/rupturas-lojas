@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import type { Database } from '~/types/supabase' // Note: This will fallback to any if no full typed DB, we use custom type below
 import type { ProdutoRuptura } from '~/types/supabase'
 
@@ -55,10 +55,9 @@ export function useRupturas() {
         }
     }
 
-    // Auto-fetch in component setup context
-    useAsyncData('rupturas-dashboard', async () => {
-        await fetchData()
-        return true
+    // Auto-fetch on client side mount
+    onMounted(() => {
+        fetchData()
     })
 
     return {
