@@ -1,34 +1,65 @@
 import { ref, computed, onMounted } from 'vue'
-import type { Database } from '~/types/supabase' // Note: This will fallback to any if no full typed DB, we use custom type below
-import type { ProdutoRuptura } from '~/types/supabase'
+import type { DashboardStats, ProdutoEstoque, ProdutoRuptura } from '~/types/supabase'
+
+type NumericLike = number | string | null | undefined
+
+function toNumber(value: NumericLike): number {
+    if (typeof value === 'number') return value
+    if (typeof value === 'string' && value.trim() !== '') return Number(value)
+    return 0
+}
 
 export function useRupturas() {
     const supabase = useSupabaseClient()
 
-    const produtos = ref<ProdutoRuptura[]>([])
+    const rupturas = ref<ProdutoRuptura[]>([])
+    const rupturaDeposito = ref<ProdutoEstoque[]>([])
     const pending = ref(false)
     const error = ref<Error | null>(null)
+    const updatedAt = ref<string | null>(null)
 
-    const stats = computed(() => {
+    const stats = computed<DashboardStats>(() => {
         let ambas = 0
-        let parcial = 0
-        let total = produtos.value.length
+        let assu = 0
+        let mossoro = 0
 
-        produtos.value.forEach(p => {
-            const isAssuZero = (p.saldo_assu || 0) <= 0
-            const isMossoroZero = (p.saldo_mossoro || 0) <= 0
+        rupturas.value.forEach((p) => {
+            const isAssuZero = toNumber(p.saldo_assu) <= 0
+            const isMossoroZero = toNumber(p.saldo_mossoro) <= 0
 
             if (isAssuZero && isMossoroZero) {
                 ambas++
-            } else if (isAssuZero || isMossoroZero) {
-                parcial++
+            } else if (isAssuZero) {
+                assu++
+            } else if (isMossoroZero) {
+                mossoro++
             }
         })
 
+        let rupturaDepositoAssu = 0
+        let rupturaDepositoMossoro = 0
+
+        rupturaDeposito.value.forEach((p) => {
+            const assuSaldo = toNumber(p.saldo_assu)
+            const mossoroSaldo = toNumber(p.saldo_mossoro)
+
+            if (assuSaldo > 0) rupturaDepositoAssu++
+            if (mossoroSaldo > 0) rupturaDepositoMossoro++
+        })
+
         return {
-            total,
-            ambas,
-            parcial
+            ruptura: {
+                total: rupturas.value.length,
+                ambas,
+                assu,
+                mossoro
+            },
+            rupturaDeposito: {
+                total: rupturaDeposito.value.length,
+                assu: rupturaDepositoAssu,
+                mossoro: rupturaDepositoMossoro
+            },
+            criticos: ambas + rupturaDeposito.value.length
         }
     })
 
@@ -37,18 +68,37 @@ export function useRupturas() {
         error.value = null
 
         try {
-            // Retornar limit 1000 por garantia inicial, ordenando pelo nome
-            const { data, error: sbError } = await supabase
-                .from('produtos_ruptura')
-                .select('*')
-                .order('nome_produto', { ascending: true })
-                .limit(1000)
+            const [rupturasResult, estoqueResult] = await Promise.all([
+                supabase
+                    .from('produtos_ruptura')
+                    .select('*')
+                    .order('nome_produto', { ascending: true })
+                    .limit(2000),
+                supabase
+                    .from('produtos_estoque')
+                    .select('*')
+                    .order('nome_produto', { ascending: true })
+                    .limit(2000)
+            ])
 
-            if (sbError) throw sbError
+            if (rupturasResult.error) throw rupturasResult.error
+            if (estoqueResult.error) throw estoqueResult.error
 
-            produtos.value = (data as ProdutoRuptura[]) || []
+            rupturas.value = (rupturasResult.data as ProdutoRuptura[]) || []
+
+            const estoqueRaw = (estoqueResult.data as ProdutoEstoque[]) || []
+
+            rupturaDeposito.value = estoqueRaw.filter((item) => {
+                const deposito = toNumber(item.saldo_deposito)
+                const assuSaldo = toNumber(item.saldo_assu)
+                const mossoroSaldo = toNumber(item.saldo_mossoro)
+
+                return deposito <= 0 && (assuSaldo > 0 || mossoroSaldo > 0)
+            })
+
+            updatedAt.value = new Date().toISOString()
         } catch (err: any) {
-            console.error('Error fetching rupturas:', err)
+            console.error('Error fetching dashboard data:', err)
             error.value = err
         } finally {
             pending.value = false
@@ -57,14 +107,16 @@ export function useRupturas() {
 
     // Auto-fetch on client side mount
     onMounted(() => {
-        fetchData()
+        void fetchData()
     })
 
     return {
-        produtos,
+        rupturas,
+        rupturaDeposito,
         stats,
         pending,
         error,
+        updatedAt,
         fetchData
     }
 }
