@@ -1,7 +1,7 @@
 <template>
-  <div class="space-y-6">
+  <div class="space-y-6 print-report-root">
     <div class="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
-      <aside class="rounded-3xl border border-slate-200/70 bg-white/90 backdrop-blur-xl shadow-[0_24px_60px_-34px_rgba(15,23,42,0.45)] p-5 xl:sticky xl:top-24 h-fit">
+      <aside class="print-hide rounded-3xl border border-slate-200/70 bg-white/90 backdrop-blur-xl shadow-[0_24px_60px_-34px_rgba(15,23,42,0.45)] p-5 xl:sticky xl:top-24 h-fit">
         <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Painel de risco</p>
         <h1 class="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">
           Controle de Ruptura
@@ -53,7 +53,7 @@
       </aside>
 
       <main class="space-y-6 min-w-0">
-        <section class="relative overflow-hidden rounded-3xl border border-slate-200/70 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-900 text-white px-6 py-7 sm:px-8">
+        <section class="print-hide relative overflow-hidden rounded-3xl border border-slate-200/70 bg-gradient-to-br from-slate-900 via-slate-800 to-cyan-900 text-white px-6 py-7 sm:px-8">
           <div class="absolute -right-12 -top-10 h-36 w-36 rounded-full bg-cyan-400/25 blur-2xl"></div>
           <div class="absolute -left-16 -bottom-14 h-44 w-44 rounded-full bg-orange-300/20 blur-3xl"></div>
 
@@ -73,13 +73,13 @@
 
         <div
           v-if="error"
-          class="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-700 shadow-sm"
+          class="print-hide rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-700 shadow-sm"
         >
           <p class="font-semibold text-sm">Erro ao carregar dados</p>
           <p class="text-sm mt-1">{{ error.message }}</p>
         </div>
 
-        <section class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-4">
+        <section class="print-hide grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-4 gap-4">
           <DashboardKpiCard
             v-for="card in activeCards"
             :key="card.title"
@@ -97,9 +97,30 @@
           :mode="activeMode"
           :departamentos="availableDepartments"
           :loading="pending"
+          class="print-hide"
         />
 
+        <div class="print-hide flex justify-end">
+          <button
+            @click="exportCompactPdf"
+            class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            :disabled="pending || activeVisibleCount === 0"
+          >
+            Gerar PDF tabela simples
+          </button>
+        </div>
+
         <section class="rounded-3xl border border-slate-200/70 bg-white/90 backdrop-blur-xl shadow-[0_20px_55px_-32px_rgba(15,23,42,0.45)] overflow-hidden">
+          <div class="print-only border-b border-slate-200 px-4 py-3">
+            <h3 class="text-sm font-bold text-slate-900">{{ activeScenario.heading }}</h3>
+            <p class="mt-1 text-xs text-slate-600">
+              Gerado em {{ printGeneratedAtLabel }} | {{ activeVisibleCount }} itens
+            </p>
+            <p class="mt-1 text-xs text-slate-600">
+              Filtros: {{ activeFilterSummary }}
+            </p>
+          </div>
+
           <div v-if="pending && !hasAnyData" class="p-12 flex flex-col items-center justify-center text-slate-500">
             <svg class="animate-spin h-8 w-8 text-cyan-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -126,7 +147,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useRupturas } from '~/composables/useRupturas'
 import type { ProdutoEstoque, ProdutoRuptura } from '~/types/supabase'
 
@@ -146,9 +167,23 @@ type KpiCardData = {
   color: 'cyan' | 'red' | 'amber' | 'slate';
 }
 
+type PrintableColumn = {
+  key: string;
+  label: string;
+  align?: 'left' | 'right';
+  width?: string;
+}
+
+type PrintableReport = {
+  title: string;
+  columns: PrintableColumn[];
+  rows: Array<Record<string, string>>;
+}
+
 const { rupturas, rupturaDeposito, stats, pending, error, updatedAt, fetchData } = useRupturas()
 
 const activeMode = ref<DashboardMode>('ruptura-loja')
+const printGeneratedAt = ref(new Date())
 
 const filters = ref<RupturaFilter>({
   search: '',
@@ -216,10 +251,60 @@ const activeVisibleCount = computed(() => {
     : filteredRupturaDeposito.value.length
 })
 
+const printGeneratedAtLabel = computed(() => {
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(printGeneratedAt.value)
+})
+
+const localFilterLabel = computed(() => {
+  if (filters.value.localFalta === 'todos') return 'Todos os locais'
+
+  if (activeMode.value === 'ruptura-loja') {
+    if (filters.value.localFalta === 'ambas') return 'Falta em Assu e Mossoro'
+    if (filters.value.localFalta === 'assu') return 'Falta apenas em Assu'
+    return 'Falta apenas em Mossoro'
+  }
+
+  if (filters.value.localFalta === 'ambas') return 'Cobertura em Assu e Mossoro'
+  if (filters.value.localFalta === 'assu') return 'Cobertura em Assu'
+  return 'Cobertura em Mossoro'
+})
+
+const activeFilterSummary = computed(() => {
+  const departmentLabel = filters.value.departamento === 'Todos' ? 'Todos os departamentos' : filters.value.departamento
+  const searchTerm = filters.value.search.trim()
+  const searchLabel = searchTerm ? `Busca: "${searchTerm}"` : 'Sem busca'
+
+  return `${departmentLabel} | ${localFilterLabel.value} | ${searchLabel}`
+})
+
 function toNumber(value: number | string | null | undefined): number {
   if (typeof value === 'number') return value
   if (typeof value === 'string' && value.trim() !== '') return Number(value)
   return 0
+}
+
+function formatPrintNumber(val: number | string | null | undefined) {
+  const num = toNumber(val)
+  return Number.isInteger(num) ? num.toString() : num.toFixed(2).replace(/\.00$/, '')
+}
+
+function normalizeText(val: string | null | undefined) {
+  return val?.trim() || '-'
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 function isAssuOnly(item: ProdutoRuptura | ProdutoEstoque) {
@@ -280,6 +365,74 @@ const filteredRupturaDeposito = computed(() => {
 
     return true
   })
+})
+
+function resolveRupturaLojaStatus(item: ProdutoRuptura) {
+  const assuZero = toNumber(item.saldo_assu) <= 0
+  const mossoroZero = toNumber(item.saldo_mossoro) <= 0
+
+  if (assuZero && mossoroZero) return 'Critico'
+  if (assuZero) return 'Falta em Assu'
+  if (mossoroZero) return 'Falta em Mossoro'
+  return 'Atencao'
+}
+
+function resolveRupturaDepositoStatus(item: ProdutoEstoque) {
+  const assu = toNumber(item.saldo_assu)
+  const mossoro = toNumber(item.saldo_mossoro)
+
+  if (assu > 0 && mossoro > 0) return 'Assu e Mossoro'
+  if (assu > 0) return 'Assu'
+  if (mossoro > 0) return 'Mossoro'
+  return '-'
+}
+
+const printableReport = computed<PrintableReport>(() => {
+  if (activeMode.value === 'ruptura-loja') {
+    return {
+      title: 'Relatorio de Ruptura em Loja',
+      columns: [
+        { key: 'codigo', label: 'Codigo', width: '12%' },
+        { key: 'produto', label: 'Produto', width: '38%' },
+        { key: 'departamento', label: 'Departamento', width: '16%' },
+        { key: 'deposito', label: 'Deposito', width: '8%', align: 'right' },
+        { key: 'assu', label: 'Assu', width: '8%', align: 'right' },
+        { key: 'mossoro', label: 'Mossoro', width: '8%', align: 'right' },
+        { key: 'status', label: 'Status', width: '10%' }
+      ],
+      rows: filteredRupturas.value.map((item) => ({
+        codigo: normalizeText(item.codigo_modelo),
+        produto: normalizeText(item.nome_produto),
+        departamento: normalizeText(item.departamento),
+        deposito: formatPrintNumber(item.qtd_total_deposito),
+        assu: formatPrintNumber(item.saldo_assu),
+        mossoro: formatPrintNumber(item.saldo_mossoro),
+        status: resolveRupturaLojaStatus(item)
+      }))
+    }
+  }
+
+  return {
+    title: 'Relatorio de Ruptura no Deposito',
+    columns: [
+      { key: 'codigo', label: 'Codigo', width: '12%' },
+      { key: 'produto', label: 'Produto', width: '40%' },
+      { key: 'departamento', label: 'Departamento', width: '16%' },
+      { key: 'assu', label: 'Assu', width: '8%', align: 'right' },
+      { key: 'mossoro', label: 'Mossoro', width: '8%', align: 'right' },
+      { key: 'deposito', label: 'Deposito', width: '8%', align: 'right' },
+      { key: 'status', label: 'Status', width: '8%' }
+    ],
+    rows: filteredRupturaDeposito.value.map((item) => ({
+      codigo: normalizeText(item.codigo_modelo),
+      produto: normalizeText(item.nome_produto),
+      departamento: normalizeText(item.departamento),
+      assu: formatPrintNumber(item.saldo_assu),
+      mossoro: formatPrintNumber(item.saldo_mossoro),
+      deposito: formatPrintNumber(item.saldo_deposito),
+      status: resolveRupturaDepositoStatus(item)
+    }))
+  }
 })
 
 const activeCards = computed<KpiCardData[]>(() => {
@@ -358,5 +511,82 @@ watch(activeMode, () => {
 
 async function refreshData() {
   await fetchData()
+}
+
+async function exportCompactPdf() {
+  if (!import.meta.client) return
+
+  printGeneratedAt.value = new Date()
+  await nextTick()
+
+  const report = printableReport.value
+  if (report.rows.length === 0) return
+
+  const colGroupHtml = report.columns
+    .map((column) => `<col style="width: ${column.width ?? 'auto'};">`)
+    .join('')
+
+  const headerHtml = report.columns
+    .map((column) => `<th class="${column.align === 'right' ? 'text-right' : ''}">${escapeHtml(column.label)}</th>`)
+    .join('')
+
+  const bodyHtml = report.rows
+    .map((row) => {
+      const cells = report.columns
+        .map((column) => `<td class="${column.align === 'right' ? 'text-right' : ''}">${escapeHtml(row[column.key] ?? '-')}</td>`)
+        .join('')
+      return `<tr>${cells}</tr>`
+    })
+    .join('')
+
+  const html = `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(report.title)}</title>
+  <style>
+    @page { size: A4 landscape; margin: 6mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; color: #111827; }
+    .wrap { width: 100%; }
+    h1 { margin: 0 0 3mm; font-size: 14px; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 9px; }
+    thead { display: table-header-group; }
+    th, td { border: 1px solid #d1d5db; padding: 2px 4px; vertical-align: top; word-break: break-word; line-height: 1.15; }
+    th { background: #f3f4f6; text-align: left; font-weight: 700; }
+    .text-right { text-align: right; }
+    tr { page-break-inside: avoid; break-inside: avoid; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>${escapeHtml(report.title)}</h1>
+    <table>
+      <colgroup>${colGroupHtml}</colgroup>
+      <thead><tr>${headerHtml}</tr></thead>
+      <tbody>${bodyHtml}</tbody>
+    </table>
+  </div>
+</body>
+</html>`
+
+  const printWindow = window.open('', '_blank', 'width=1200,height=900')
+
+  if (!printWindow) {
+    window.alert('Nao foi possivel abrir a janela de impressao. Libere pop-ups para gerar o PDF em tabela simples.')
+    return
+  }
+
+  printWindow.document.open()
+  printWindow.document.write(html)
+  printWindow.document.close()
+
+  const closeOnPrint = () => printWindow.close()
+  printWindow.addEventListener('afterprint', closeOnPrint, { once: true })
+
+  setTimeout(() => {
+    printWindow.focus()
+    printWindow.print()
+  }, 150)
 }
 </script>

@@ -10,8 +10,8 @@
       <p class="mt-1 text-sm text-slate-500">Ajuste os filtros para visualizar as rupturas de deposito.</p>
     </div>
 
-    <div v-else class="overflow-x-auto">
-      <table class="min-w-[980px] w-full divide-y divide-slate-200">
+    <div v-else class="overflow-x-auto print-overflow-reset">
+      <table class="min-w-[980px] w-full divide-y divide-slate-200 print-report-table">
         <thead class="bg-slate-50/80">
           <tr>
             <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Produto</th>

@@ -1,8 +1,8 @@
 <template>
   <div class="relative min-h-screen bg-slate-100">
-    <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.14),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(251,146,60,0.14),transparent_40%)]"></div>
+    <div class="print-hide pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.14),transparent_42%),radial-gradient(circle_at_bottom_left,rgba(251,146,60,0.14),transparent_40%)]"></div>
 
-    <header class="sticky top-0 z-40 border-b border-slate-200/70 bg-white/85 backdrop-blur-xl">
+    <header class="print-hide sticky top-0 z-40 border-b border-slate-200/70 bg-white/85 backdrop-blur-xl">
       <div class="mx-auto w-full max-w-[1480px] px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="h-11 w-11 rounded-xl bg-slate-900/95 ring-1 ring-slate-800/20 flex items-center justify-center">
