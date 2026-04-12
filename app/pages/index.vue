@@ -539,12 +539,15 @@ async function exportCompactPdf() {
     })
     .join('')
 
+  const styleTagOpen = '<st' + 'yle>'
+  const styleTagClose = '</st' + 'yle>'
+
   const html = `<!doctype html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
   <title>${escapeHtml(report.title)}</title>
-  <style>
+  ${styleTagOpen}
     @page { size: A4 landscape; margin: 6mm; }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Arial, sans-serif; color: #111827; }
@@ -556,7 +559,7 @@ async function exportCompactPdf() {
     th { background: #f3f4f6; text-align: left; font-weight: 700; }
     .text-right { text-align: right; }
     tr { page-break-inside: avoid; break-inside: avoid; }
-  </style>
+  ${styleTagClose}
 </head>
 <body>
   <div class="wrap">
