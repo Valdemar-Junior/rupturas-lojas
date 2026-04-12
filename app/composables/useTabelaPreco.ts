@@ -105,14 +105,26 @@ export function useTabelaPreco() {
       .from('tabela_preco_solicitacoes')
       .select('*')
       .eq('tabela_preco_nome', nomeTabela)
-      .in('status', ['resolvida', 'cancelada'])
-      .order('resolvido_em', { ascending: false, nullsFirst: false })
-      .order('updated_at', { ascending: false })
       .limit(5000)
 
     if (requestError) throw requestError
 
-    return (data as TabelaPrecoSolicitacao[]) ?? []
+    const rows = (data as TabelaPrecoSolicitacao[]) ?? []
+
+    return rows.sort((a, b) => {
+      const priority = (status: TabelaPrecoSolicitacao['status']) => {
+        if (status === 'pendente') return 0
+        if (status === 'resolvida') return 1
+        return 2
+      }
+
+      const byStatus = priority(a.status) - priority(b.status)
+      if (byStatus !== 0) return byStatus
+
+      const dateA = new Date(a.status === 'pendente' ? a.created_at : (a.resolvido_em || a.updated_at)).getTime()
+      const dateB = new Date(b.status === 'pendente' ? b.created_at : (b.resolvido_em || b.updated_at)).getTime()
+      return dateB - dateA
+    })
   }
 
   async function resolveAutomaticallyIfNeeded(

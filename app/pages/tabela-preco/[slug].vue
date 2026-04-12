@@ -414,6 +414,19 @@
           </template>
 
           <template v-else>
+            <div class="print-hide border-b border-slate-200 px-4 py-3 sm:px-5 flex flex-wrap items-center justify-between gap-2">
+              <p class="text-xs text-slate-500">
+                Exporte as solicitacoes pendentes para compartilhar com os gerentes.
+              </p>
+              <button
+                class="inline-flex items-center rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                :disabled="pendingRequestCount === 0"
+                @click="exportPendingRequestsPdf"
+              >
+                Gerar PDF solicitacoes pendentes
+              </button>
+            </div>
+
             <div v-if="pending && solicitacoesHistorico.length === 0" class="p-12 flex flex-col items-center justify-center text-slate-500">
               <svg class="animate-spin h-8 w-8 text-cyan-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -465,7 +478,8 @@
                   {{ historyResultLabel(request) }}
                 </p>
                 <p class="mt-1 text-xs text-slate-500">
-                  Finalizado em {{ formatDateTime(request.resolvido_em || request.updated_at) }}
+                  {{ request.status === 'pendente' ? 'Pendente desde' : 'Finalizado em' }}
+                  {{ formatDateTime(request.status === 'pendente' ? request.created_at : (request.resolvido_em || request.updated_at)) }}
                 </p>
               </article>
             </div>
@@ -1252,7 +1266,167 @@ function historyStatusClass(status: TabelaPrecoSolicitacao['status']) {
   return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
 }
 
+function requestActionLabel(action: TabelaPrecoSolicitacao['acao']) {
+  if (action === 'alterar_preco') return 'Alterar preco'
+  if (action === 'excluir') return 'Excluir produto'
+  return 'Adicionar produto'
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function exportPendingRequestsPdf() {
+  if (!import.meta.client) return
+
+  const requests = [...solicitacoesPendentes.value]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+  if (requests.length === 0) {
+    window.alert('Nao ha solicitacoes pendentes para gerar o PDF.')
+    return
+  }
+
+  const generatedAt = new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date())
+
+  const reportTitle = `Solicitacoes pendentes - ${activeTable.value?.title || 'Tabela de Preco'}`
+  const reportSubtitle = `${requests.length} solicitacoes pendentes | Gerado em ${generatedAt}`
+  const logoUrl = new URL('/LOGONEW .png', window.location.origin).toString()
+
+  const bodyHtml = requests.map((request) => {
+    const codigo = normalizeText(request.codigo)
+    const produto = normalizeText(request.produto)
+    const solicitante = request.solicitante?.trim() || 'nao informado'
+    const detalhes = describeRequest(request)
+    const observacao = request.observacao?.trim() || '-'
+    const relatedCodes = relatedCodesFromRequest(request)
+    const relatedCodesLabel = relatedCodes.length > 0 ? relatedCodes.join(', ') : '-'
+
+    return `<tr>
+      <td>${escapeHtml(formatDateTime(request.created_at))}</td>
+      <td>${escapeHtml(requestActionLabel(request.acao))}</td>
+      <td>${escapeHtml(codigo)}</td>
+      <td>${escapeHtml(produto)}</td>
+      <td>${escapeHtml(solicitante)}</td>
+      <td>${escapeHtml(relatedCodesLabel)}</td>
+      <td>${escapeHtml(detalhes)}</td>
+      <td>${escapeHtml(observacao)}</td>
+    </tr>`
+  }).join('')
+
+  const styleTagOpen = '<st' + 'yle>'
+  const styleTagClose = '</st' + 'yle>'
+
+  const html = `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(reportTitle)}</title>
+  ${styleTagOpen}
+    @page { size: A4 landscape; margin: 8mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; color: #0f172a; }
+    .wrap { width: 100%; }
+    .header { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+    .logo-wrap { display: flex; align-items: center; justify-content: center; width: 96px; height: 96px; padding: 0; border: none; border-radius: 0; box-shadow: none; background: transparent; }
+    .logo-wrap img { width: 96px; height: auto; object-fit: contain; display: block; }
+    .meta h1 { margin: 0; font-size: 16px; font-weight: 700; }
+    .sub { margin: 4px 0 0; font-size: 11px; color: #475569; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 10px; }
+    thead { display: table-header-group; }
+    th, td { border: 1px solid #cbd5e1; padding: 5px 6px; vertical-align: top; word-break: break-word; }
+    th { background: #f1f5f9; text-align: left; font-weight: 700; }
+    tr { page-break-inside: avoid; break-inside: avoid; }
+  ${styleTagClose}
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div class="logo-wrap">
+        <img src="${logoUrl}" alt="Logo Lojao" />
+      </div>
+      <div class="meta">
+        <h1>${escapeHtml(reportTitle)}</h1>
+        <p class="sub">${escapeHtml(reportSubtitle)}</p>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 10%;">Data</th>
+          <th style="width: 10%;">Acao</th>
+          <th style="width: 8%;">Codigo</th>
+          <th style="width: 24%;">Produto</th>
+          <th style="width: 10%;">Solicitante</th>
+          <th style="width: 10%;">Codigos do kit</th>
+          <th style="width: 16%;">Solicitacao</th>
+          <th style="width: 12%;">Observacao</th>
+        </tr>
+      </thead>
+      <tbody>${bodyHtml}</tbody>
+    </table>
+  </div>
+</body>
+</html>`
+
+  const printWindow = window.open('', '_blank', 'width=1280,height=900')
+  if (!printWindow) {
+    window.alert('Nao foi possivel abrir a janela de impressao. Libere pop-ups para gerar o PDF.')
+    return
+  }
+
+  printWindow.document.open()
+  printWindow.document.write(html)
+  printWindow.document.close()
+
+  const closeOnPrint = () => printWindow.close()
+  printWindow.addEventListener('afterprint', closeOnPrint, { once: true })
+  const triggerPrint = () => {
+    printWindow.focus()
+    printWindow.print()
+  }
+
+  const images = Array.from(printWindow.document.images)
+  if (images.length === 0) {
+    setTimeout(triggerPrint, 120)
+    return
+  }
+
+  let pendingImages = images.length
+  const onImageReady = () => {
+    pendingImages -= 1
+    if (pendingImages <= 0) {
+      setTimeout(triggerPrint, 120)
+    }
+  }
+
+  images.forEach((img) => {
+    if (img.complete) {
+      onImageReady()
+      return
+    }
+
+    img.addEventListener('load', onImageReady, { once: true })
+    img.addEventListener('error', onImageReady, { once: true })
+  })
+}
+
 function historyResultLabel(request: TabelaPrecoSolicitacao) {
+  if (request.status === 'pendente') {
+    return 'Pendente de atendimento no ERP.'
+  }
+
   if (request.motivo_resolucao) return request.motivo_resolucao
 
   if (request.status === 'cancelada') {
