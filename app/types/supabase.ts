@@ -42,3 +42,41 @@ export interface DashboardStats {
     };
     criticos: number;
 }
+
+export interface TabelaPrecoItem {
+    id: number;
+    created_at: string | null;
+    updated_at: string | null;
+    tabela_preco: string | null;
+    codigo: string | null;
+    produto: string | null;
+    preco_tabela: number | string | null;
+    custo: number | string | null;
+    dvv_percentual: number | string | null;
+    mc: number | string | null;
+    quantidade_disponivel_total: number | string | null;
+    detalhamento_estoque: string | null;
+}
+
+export type SolicitacaoAcao = 'alterar_preco' | 'excluir' | 'adicionar_produto';
+
+export type SolicitacaoStatus = 'pendente' | 'resolvida' | 'cancelada';
+
+export interface TabelaPrecoSolicitacao {
+    id: number;
+    tabela_preco_id: number | null;
+    tabela_preco_nome: string;
+    codigo: string | null;
+    codigos_relacionados: string[] | null;
+    produto: string | null;
+    acao: SolicitacaoAcao;
+    preco_atual: number | string | null;
+    novo_preco: number | string | null;
+    solicitante: string | null;
+    observacao: string | null;
+    status: SolicitacaoStatus;
+    motivo_resolucao: string | null;
+    resolvido_em: string | null;
+    created_at: string;
+    updated_at: string;
+}
