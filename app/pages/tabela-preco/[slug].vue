@@ -210,6 +210,19 @@
 
         <section class="rounded-3xl border border-slate-200/70 bg-white/90 backdrop-blur-xl shadow-[0_20px_55px_-32px_rgba(15,23,42,0.45)] overflow-hidden">
           <template v-if="activePanelTab === 'tabela'">
+            <div class="print-hide border-b border-slate-200 px-4 py-3 sm:px-5 flex flex-wrap items-center justify-between gap-2">
+              <p class="text-xs text-slate-500">
+                Gere o PDF com os produtos exibidos na tabela atual (filtro aplicado).
+              </p>
+              <button
+                class="inline-flex items-center rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                :disabled="displayItems.length === 0"
+                @click="exportProductsTablePdf"
+              >
+                Gerar PDF da tabela
+              </button>
+            </div>
+
             <div v-if="pending && items.length === 0" class="p-12 flex flex-col items-center justify-center text-slate-500">
               <svg class="animate-spin h-8 w-8 text-cyan-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -218,7 +231,7 @@
               <p>Buscando tabela de preco no Supabase...</p>
             </div>
 
-            <div v-else-if="filteredItems.length === 0" class="p-12 text-center">
+            <div v-else-if="displayItems.length === 0" class="p-12 text-center">
               <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 mb-4">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2a4 4 0 114 0v2m-4 0h4m-7 0h10a2 2 0 002-2v-5a2 2 0 00-2-2H6a2 2 0 00-2 2v5a2 2 0 002 2z" />
@@ -255,7 +268,7 @@
                 </thead>
                 <tbody class="bg-white divide-y divide-slate-200/80">
                   <tr
-                    v-for="item in filteredItems"
+                    v-for="item in displayItems"
                     :key="item.id"
                     class="transition-colors hover:bg-gradient-to-r hover:from-cyan-50/60 hover:to-transparent"
                   >
@@ -265,44 +278,85 @@
                       </span>
                     </td>
                     <td class="px-3 py-3 align-top">
-                      <p class="text-sm font-semibold text-slate-900 leading-snug break-words">
-                        {{ normalizeText(item.produto) }}
-                      </p>
-                      <div
-                        v-if="parsedDetalhamento(item.detalhamento_estoque).length > 0"
-                        class="mt-2 flex flex-wrap gap-1.5"
-                      >
-                        <div
-                          v-for="detail in parsedDetalhamento(item.detalhamento_estoque)"
-                          :key="detail.key"
-                          class="inline-flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5"
+                      <div class="flex flex-wrap items-center gap-2">
+                        <p class="text-sm font-semibold text-slate-900 leading-snug break-words">
+                          {{ normalizeText(item.produto) }}
+                        </p>
+                        <span
+                          v-if="isKitItem(item)"
+                          class="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700 ring-1 ring-indigo-200"
                         >
-                          <p class="text-[11px] font-semibold text-slate-700">
-                            {{ detail.label }}
-                          </p>
-                          <span class="inline-flex items-center rounded-md bg-cyan-50 px-2 py-0.5 text-[11px] font-semibold text-cyan-700 ring-1 ring-cyan-200">
-                            Assu: {{ formatStockQuantity(detail.assu) }}
-                          </span>
-                          <span class="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200">
-                            Deposito: {{ formatStockQuantity(detail.deposito) }}
-                          </span>
-                          <span class="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                            Mossoro: {{ formatStockQuantity(detail.mossoro) }}
-                          </span>
-                        </div>
+                          Kit
+                        </span>
                       </div>
-                      <p
-                        v-else-if="item.detalhamento_estoque"
-                        class="mt-1 text-xs text-slate-500 break-words"
-                      >
-                        {{ item.detalhamento_estoque }}
-                      </p>
+
+                      <template v-if="isKitItem(item)">
+                        <p class="mt-2 text-[11px] text-slate-500">
+                          {{ kitComponents(item).length }} componente(s) no kit.
+                        </p>
+
+                        <div class="mt-2 flex flex-wrap gap-1.5">
+                          <div
+                            v-for="component in kitComponents(item)"
+                            :key="component.key"
+                            class="inline-flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5"
+                          >
+                            <p class="text-[11px] font-semibold text-slate-700">
+                              {{ component.label }}
+                            </p>
+                            <span class="inline-flex items-center rounded-md bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700 ring-1 ring-violet-200">
+                              Qtd comp: {{ formatComponentQuantity(component.quantidade) }}
+                            </span>
+                            <span class="inline-flex items-center rounded-md bg-cyan-50 px-2 py-0.5 text-[11px] font-semibold text-cyan-700 ring-1 ring-cyan-200">
+                              Assu: {{ formatStockQuantity(component.assu) }}
+                            </span>
+                            <span class="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200">
+                              Deposito: {{ formatStockQuantity(component.deposito) }}
+                            </span>
+                            <span class="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                              Mossoro: {{ formatStockQuantity(component.mossoro) }}
+                            </span>
+                          </div>
+                        </div>
+                      </template>
+
+                      <template v-else>
+                        <div
+                          v-if="parsedDetalhamento(item.detalhamento_estoque).length > 0"
+                          class="mt-2 flex flex-wrap gap-1.5"
+                        >
+                          <div
+                            v-for="detail in parsedDetalhamento(item.detalhamento_estoque)"
+                            :key="detail.key"
+                            class="inline-flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50/80 px-2.5 py-1.5"
+                          >
+                            <p class="text-[11px] font-semibold text-slate-700">
+                              {{ detail.label }}
+                            </p>
+                            <span class="inline-flex items-center rounded-md bg-cyan-50 px-2 py-0.5 text-[11px] font-semibold text-cyan-700 ring-1 ring-cyan-200">
+                              Assu: {{ formatStockQuantity(detail.assu) }}
+                            </span>
+                            <span class="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200">
+                              Deposito: {{ formatStockQuantity(detail.deposito) }}
+                            </span>
+                            <span class="inline-flex items-center rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                              Mossoro: {{ formatStockQuantity(detail.mossoro) }}
+                            </span>
+                          </div>
+                        </div>
+                        <p
+                          v-else-if="item.detalhamento_estoque"
+                          class="mt-1 text-xs text-slate-500 break-words"
+                        >
+                          {{ item.detalhamento_estoque }}
+                        </p>
+                      </template>
                     </td>
                     <td class="px-3 py-3 text-right text-sm font-semibold text-slate-900 align-top">{{ formatDecimal(item.preco_tabela) }}</td>
-                    <td class="px-3 py-3 text-right text-sm text-slate-700 align-top">{{ formatDecimal(item.custo) }}</td>
+                    <td class="px-3 py-3 text-right text-sm text-slate-700 align-top">{{ formatDecimal(resolveItemCusto(item)) }}</td>
                     <td class="px-3 py-3 text-right text-sm text-slate-700 align-top">{{ formatDecimal(item.dvv_percentual) }}</td>
                     <td class="px-3 py-3 text-right text-sm text-slate-700 align-top">{{ formatDecimal(item.mc) }}</td>
-                    <td class="px-3 py-3 text-right text-sm text-slate-700 align-top">{{ formatDecimal(item.quantidade_disponivel_total) }}</td>
+                    <td class="px-3 py-3 text-right text-sm text-slate-700 align-top">{{ formatDecimal(resolveItemQuantidadeTotal(item)) }}</td>
                     <td class="px-3 py-3 align-top">
                       <div
                         v-if="requestByRowId[item.id]"
@@ -488,13 +542,13 @@
 
         <div
           v-if="isAddProductModalOpen"
-          class="fixed inset-0 z-[70] flex items-center justify-center p-4"
+          class="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto p-2 sm:items-center sm:p-4"
         >
           <div
             class="absolute inset-0 bg-slate-950/55 backdrop-blur-[2px]"
             @click="closeAddProductModal"
           />
-          <div class="relative z-[71] w-full max-w-2xl rounded-2xl border border-slate-200 bg-white shadow-2xl">
+          <div class="relative z-[71] flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)]">
             <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
               <div>
                 <h3 class="text-base font-semibold text-slate-900">Solicitar adicao de produto</h3>
@@ -508,14 +562,33 @@
               </button>
             </div>
 
-            <div class="space-y-3 px-4 py-4">
-              <input
-                v-model="addProductSearch"
-                type="text"
-                class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
-                placeholder="Digite codigo ou nome do produto..."
-                @input="clearSelectedProductIfNeeded"
-              >
+            <div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
+              <div class="grid gap-2 sm:grid-cols-[minmax(0,1fr)_150px_auto]">
+                <input
+                  v-model="addProductSearch"
+                  type="text"
+                  class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                  placeholder="Digite codigo ou nome do produto..."
+                  @input="clearSelectedProductIfNeeded"
+                  @keydown.enter.prevent="runAddProductSearchNow"
+                >
+                <select
+                  v-model="addProductSearchMode"
+                  class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                >
+                  <option value="codigo">Codigo</option>
+                  <option value="descricao">Descricao</option>
+                  <option value="ambos">Codigo + Descricao</option>
+                </select>
+                <button
+                  type="button"
+                  class="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60"
+                  :disabled="addProductLoading || addProductSearch.trim().length < 2"
+                  @click="runAddProductSearchNow"
+                >
+                  Buscar
+                </button>
+              </div>
 
               <div class="rounded-xl border border-slate-200 bg-slate-50 p-2">
                 <p class="px-1 text-xs text-slate-500">
@@ -561,7 +634,7 @@
                   <div class="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
                     <p class="text-[11px] uppercase tracking-wide text-slate-500">Custo</p>
                     <p class="mt-1 text-sm font-semibold text-slate-900">
-                      {{ formatCurrency(selectedAddProduct.custo) }}
+                      {{ formatCurrency(addProductDisplayedCusto) }}
                     </p>
                   </div>
                   <div class="rounded-lg border border-slate-200 bg-white px-2.5 py-2">
@@ -569,6 +642,40 @@
                     <p class="mt-1 text-sm font-semibold text-slate-900">
                       {{ formatPercent(addProductCurrentMc) }}
                     </p>
+                  </div>
+                </div>
+
+                <div
+                  v-if="addProductIsKit"
+                  class="mt-2 rounded-lg border border-indigo-200 bg-indigo-50/60 px-2.5 py-2"
+                >
+                  <p class="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+                    Kit detectado
+                  </p>
+                  <p class="mt-1 text-xs text-indigo-700">
+                    Custo do kit calculado por componentes (custo unitario x quantidade de cada componente).
+                    <span v-if="addProductKitCostLoading"> Carregando custos dos componentes...</span>
+                  </p>
+                  <div
+                    v-if="addProductKitComponentsResolved.length > 0"
+                    class="mt-2 flex flex-wrap gap-1.5"
+                  >
+                    <div
+                      v-for="component in addProductKitComponentsResolved"
+                      :key="component.key"
+                      class="inline-flex flex-wrap items-center gap-1.5 rounded-md border border-indigo-200 bg-white px-2 py-1"
+                    >
+                      <span class="text-[11px] font-semibold text-slate-700">{{ component.codigo }}</span>
+                      <span class="rounded-md bg-violet-50 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700 ring-1 ring-violet-200">
+                        Qtd: {{ formatComponentQuantity(component.quantidade) }}
+                      </span>
+                      <span class="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">
+                        Custo: {{ formatCurrency(component.custoUnitario) }}
+                      </span>
+                      <span class="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                        Total: {{ formatCurrency(component.custoTotal) }}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -670,6 +777,21 @@ type EstoqueDetalhe = {
   mossoro: number | null;
 }
 
+type KitQuantidadeComponente = {
+  codigo: string;
+  quantidade: number | null;
+}
+
+type KitComponenteDetalhe = {
+  key: string;
+  codigo: string;
+  label: string;
+  quantidade: number | null;
+  assu: number | null;
+  deposito: number | null;
+  mossoro: number | null;
+}
+
 type RequestFormState = {
   acao: SolicitacaoAcao;
   novoPreco: string;
@@ -678,6 +800,7 @@ type RequestFormState = {
 }
 
 type PanelTab = 'tabela' | 'historico'
+type AddProductSearchMode = 'codigo' | 'descricao' | 'ambos'
 
 type AddProductSuggestion = {
   codigo: string;
@@ -689,6 +812,18 @@ type AddProductSuggestion = {
   mc: number | null;
   quantidade_disponivel_total: number | null;
   detalhamento_estoque: string | null;
+  quantidade_componente: string | null;
+}
+
+type AddProductKitComponent = {
+  key: string;
+  codigo: string;
+  quantidade: number | null;
+  custoUnitario: number | null;
+  custoTotal: number | null;
+  assu: number | null;
+  deposito: number | null;
+  mossoro: number | null;
 }
 
 const MC_TAX_RATE = 0.165
@@ -713,12 +848,14 @@ const search = ref('')
 const activePanelTab = ref<PanelTab>('tabela')
 const currentProfile = ref<UserProfile>('diretor')
 const detailCache = new Map<string, EstoqueDetalhe[]>()
+const kitComponentCache = new Map<string, KitComponenteDetalhe[]>()
 const requestFormRowId = ref<number | null>(null)
 const requestFormError = ref<string | null>(null)
 const cancelErrorRequestId = ref<number | null>(null)
 const cancelErrorMessage = ref<string | null>(null)
 const isAddProductModalOpen = ref(false)
 const addProductSearch = ref('')
+const addProductSearchMode = ref<AddProductSearchMode>('codigo')
 const addProductSuggestions = ref<AddProductSuggestion[]>([])
 const addProductLoading = ref(false)
 const addProductError = ref<string | null>(null)
@@ -726,6 +863,11 @@ const addProductObservation = ref('')
 const selectedAddProduct = ref<AddProductSuggestion | null>(null)
 const addProductPriceInput = ref('')
 const addProductRelatedCodesInput = ref('')
+const addProductResolvedCusto = ref<number | null>(null)
+const addProductKitComponentsResolved = ref<AddProductKitComponent[]>([])
+const addProductKitCostLoading = ref(false)
+const addProductSuggestionCache = new Map<string, AddProductSuggestion | null>()
+let addProductResolveToken = 0
 let addProductSearchTimer: ReturnType<typeof setTimeout> | null = null
 const requestForm = ref<RequestFormState>({
   acao: 'alterar_preco',
@@ -762,15 +904,21 @@ const pendingAddRequests = computed(() => {
   return solicitacoesPendentes.value.filter((request) => request.acao === 'adicionar_produto')
 })
 const addProductParsedPrice = computed(() => parseMoneyInput(addProductPriceInput.value))
+const addProductDisplayedCusto = computed(() => {
+  if (addProductResolvedCusto.value !== null) return addProductResolvedCusto.value
+  return selectedAddProduct.value?.custo ?? null
+})
+const addProductIsKit = computed(() => {
+  if (!selectedAddProduct.value) return false
+  return parseKitQuantidades(selectedAddProduct.value.quantidade_componente).length > 0
+})
 const addProductCurrentMc = computed(() => {
   if (!selectedAddProduct.value) return null
-  if (selectedAddProduct.value.mc !== null) return selectedAddProduct.value.mc
-
-  return calculateMc(selectedAddProduct.value.preco_tabela, selectedAddProduct.value.custo)
+  return calculateMc(selectedAddProduct.value.preco_tabela, addProductDisplayedCusto.value)
 })
 const addProductCalculatedMc = computed(() => {
   if (!selectedAddProduct.value) return null
-  return calculateMc(addProductParsedPrice.value, selectedAddProduct.value.custo)
+  return calculateMc(addProductParsedPrice.value, addProductDisplayedCusto.value)
 })
 const addProductRelatedCodes = computed(() => parseRelatedCodesInput(addProductRelatedCodesInput.value))
 
@@ -779,7 +927,7 @@ const addProductHintText = computed(() => {
   if (!addProductSearch.value.trim()) return 'Digite pelo menos 2 caracteres para buscar.'
   if (addProductSearch.value.trim().length < 2) return 'Digite pelo menos 2 caracteres para buscar.'
   if (addProductSuggestions.value.length === 0) return 'Nenhum produto encontrado para este termo.'
-  return 'Selecione um produto para solicitar a adicao.'
+  return 'Selecione um produto para solicitar a adicao. Dica: use Enter ou o botao Buscar.'
 })
 
 const requestByRowId = computed<Record<number, TabelaPrecoSolicitacao>>(() => {
@@ -818,6 +966,64 @@ const filteredItems = computed(() => {
     const detalhe = item.detalhamento_estoque?.toLowerCase() ?? ''
     return codigo.includes(term) || produto.includes(term) || detalhe.includes(term)
   })
+})
+
+const filteredItemsByCode = computed(() => {
+  const map = new Map<string, TabelaPrecoItem>()
+
+  filteredItems.value.forEach((item) => {
+    const code = normalizeKitComponentCode(item.codigo)
+    if (!code || map.has(code)) return
+    map.set(code, item)
+  })
+
+  return map
+})
+
+const hiddenCodesInMainList = computed(() => {
+  const hidden = new Set<string>()
+  const rowCodeMap = filteredItemsByCode.value
+
+  filteredItems.value.forEach((kitItem) => {
+    if (!isKitItem(kitItem)) return
+    const kitCode = normalizeKitComponentCode(kitItem.codigo)
+
+    kitComponents(kitItem).forEach((component) => {
+      const componentCode = normalizeKitComponentCode(component.codigo)
+      const componentBaseCode = extractBaseCode(componentCode)
+
+      if (componentCode && componentCode !== kitCode && rowCodeMap.has(componentCode)) {
+        hidden.add(componentCode)
+      }
+
+      if (componentBaseCode && componentBaseCode !== kitCode && rowCodeMap.has(componentBaseCode)) {
+        hidden.add(componentBaseCode)
+      }
+    })
+  })
+
+  return hidden
+})
+
+const displayItems = computed(() => {
+  return filteredItems.value.filter((item) => {
+    const code = normalizeKitComponentCode(item.codigo)
+    if (!code) return true
+
+    return !hiddenCodesInMainList.value.has(code)
+  })
+})
+
+const itemsByCode = computed(() => {
+  const map = new Map<string, TabelaPrecoItem>()
+
+  items.value.forEach((item) => {
+    const code = normalizeKitComponentCode(item.codigo)
+    if (!code || map.has(code)) return
+    map.set(code, item)
+  })
+
+  return map
 })
 
 watch(
@@ -869,20 +1075,37 @@ watch(
     }
 
     addProductSearchTimer = setTimeout(async () => {
-      await fetchAddProductSuggestions(term)
+      await fetchAddProductSuggestions(term, addProductSearchMode.value)
     }, 350)
+  }
+)
+
+watch(
+  () => addProductSearchMode.value,
+  () => {
+    if (!isAddProductModalOpen.value) return
+    clearSelectedProductIfNeeded()
+    void runAddProductSearchNow()
   }
 )
 
 watch(
   () => selectedAddProduct.value,
   (product) => {
+    addProductResolveToken += 1
+    const resolveToken = addProductResolveToken
+
+    addProductResolvedCusto.value = null
+    addProductKitComponentsResolved.value = []
+    addProductKitCostLoading.value = false
+
     if (!product) {
       addProductPriceInput.value = ''
       return
     }
 
     addProductPriceInput.value = formatDecimalToInput(product.preco_tabela)
+    void resolveSelectedAddProductKitCost(product, resolveToken)
   }
 )
 
@@ -968,10 +1191,15 @@ async function cancelPendingRequest(request: TabelaPrecoSolicitacao | undefined)
 function openAddProductModal() {
   addProductError.value = null
   addProductSearch.value = ''
+  addProductSearchMode.value = 'codigo'
   addProductSuggestions.value = []
   addProductObservation.value = ''
   addProductPriceInput.value = ''
   addProductRelatedCodesInput.value = ''
+  addProductResolvedCusto.value = null
+  addProductKitComponentsResolved.value = []
+  addProductKitCostLoading.value = false
+  addProductResolveToken += 1
   selectedAddProduct.value = null
   isAddProductModalOpen.value = true
 }
@@ -982,15 +1210,41 @@ function closeAddProductModal() {
   addProductLoading.value = false
   addProductSuggestions.value = []
   addProductSearch.value = ''
+  addProductSearchMode.value = 'codigo'
   addProductObservation.value = ''
   addProductPriceInput.value = ''
   addProductRelatedCodesInput.value = ''
+  addProductResolvedCusto.value = null
+  addProductKitComponentsResolved.value = []
+  addProductKitCostLoading.value = false
+  addProductResolveToken += 1
   selectedAddProduct.value = null
 
   if (addProductSearchTimer) {
     clearTimeout(addProductSearchTimer)
     addProductSearchTimer = null
   }
+}
+
+async function runAddProductSearchNow() {
+  if (!isAddProductModalOpen.value) return
+
+  if (addProductSearchTimer) {
+    clearTimeout(addProductSearchTimer)
+    addProductSearchTimer = null
+  }
+
+  const term = addProductSearch.value.trim()
+  if (term.length < 2) {
+    addProductSuggestions.value = []
+    addProductLoading.value = false
+    if (!term) {
+      addProductError.value = null
+    }
+    return
+  }
+
+  await fetchAddProductSuggestions(term, addProductSearchMode.value)
 }
 
 function normalizeProductSuggestion(entry: any): AddProductSuggestion | null {
@@ -1022,7 +1276,141 @@ function normalizeProductSuggestion(entry: any): AddProductSuggestion | null {
     dvv_percentual: parseSuggestionNumber(entry?.dvv_percentual),
     mc: parseSuggestionNumber(entry?.mc),
     quantidade_disponivel_total: parseSuggestionNumber(entry?.quantidade_disponivel_total),
-    detalhamento_estoque: parseSuggestionText(entry?.detalhamento_estoque)
+    detalhamento_estoque: parseSuggestionText(entry?.detalhamento_estoque),
+    quantidade_componente: parseSuggestionText(entry?.quantidade_componente)
+  }
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100
+}
+
+function buildAddProductKitComponents(product: AddProductSuggestion): AddProductKitComponent[] {
+  const quantityEntries = parseKitQuantidades(product.quantidade_componente)
+  if (quantityEntries.length === 0) return []
+
+  const details = parsedDetalhamento(product.detalhamento_estoque)
+  const detailByCode = new Map<string, EstoqueDetalhe>()
+
+  details.forEach((detail) => {
+    const code = extractCodeFromDetailLabel(detail.label)
+    if (!code || detailByCode.has(code)) return
+    detailByCode.set(code, detail)
+  })
+
+  return quantityEntries.map((entry, index) => {
+    const detail = detailByCode.get(entry.codigo)
+    return {
+      key: `${entry.codigo}-${index}`,
+      codigo: entry.codigo,
+      quantidade: entry.quantidade,
+      custoUnitario: null,
+      custoTotal: null,
+      assu: detail?.assu ?? null,
+      deposito: detail?.deposito ?? null,
+      mossoro: detail?.mossoro ?? null
+    }
+  })
+}
+
+async function fetchSuggestionByCode(code: string): Promise<AddProductSuggestion | null> {
+  const normalizedCode = normalizeKitComponentCode(code)
+  if (!normalizedCode) return null
+
+  const baseCode = extractBaseCode(normalizedCode)
+  const candidates = Array.from(new Set([normalizedCode, baseCode].filter(Boolean)))
+
+  for (const candidate of candidates) {
+    if (addProductSuggestionCache.has(candidate)) {
+      const cached = addProductSuggestionCache.get(candidate) ?? null
+      if (cached) return cached
+    }
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const response = await $fetch<any[]>('/api/produtos/buscar', {
+        query: {
+          q: candidate,
+          mode: 'codigo'
+        }
+      })
+
+      const parsed = (response ?? [])
+        .map(normalizeProductSuggestion)
+        .filter((entry): entry is AddProductSuggestion => entry !== null)
+
+      parsed.forEach((entry) => {
+        const key = normalizeKitComponentCode(entry.codigo)
+        if (!key) return
+        addProductSuggestionCache.set(key, entry)
+      })
+
+      const exactMatch = parsed.find((entry) => normalizeKitComponentCode(entry.codigo) === candidate) ?? null
+      addProductSuggestionCache.set(candidate, exactMatch)
+
+      if (exactMatch) return exactMatch
+    } catch {
+      addProductSuggestionCache.set(candidate, null)
+    }
+  }
+
+  addProductSuggestionCache.set(normalizedCode, null)
+  if (baseCode) addProductSuggestionCache.set(baseCode, null)
+  return null
+}
+
+async function resolveSelectedAddProductKitCost(product: AddProductSuggestion, resolveToken: number) {
+  const baseComponents = buildAddProductKitComponents(product)
+  if (baseComponents.length === 0) {
+    addProductResolvedCusto.value = product.custo
+    return
+  }
+
+  addProductKitCostLoading.value = true
+
+  try {
+    const resolvedComponents: AddProductKitComponent[] = []
+
+    for (const component of baseComponents) {
+      if (resolveToken !== addProductResolveToken) return
+
+      const componentSuggestion = await fetchSuggestionByCode(component.codigo)
+      const custoUnitario = componentSuggestion?.custo ?? null
+      const custoTotal = (
+        custoUnitario !== null &&
+        component.quantidade !== null &&
+        Number.isFinite(component.quantidade)
+      )
+        ? roundMoney(custoUnitario * component.quantidade)
+        : null
+
+      resolvedComponents.push({
+        ...component,
+        custoUnitario,
+        custoTotal
+      })
+    }
+
+    if (resolveToken !== addProductResolveToken) return
+
+    addProductKitComponentsResolved.value = resolvedComponents
+    const hasAllTotals = resolvedComponents.length > 0
+      && resolvedComponents.every((component) => component.custoTotal !== null)
+
+    if (hasAllTotals) {
+      const totalCost = resolvedComponents.reduce((acc, component) => {
+        return acc + (component.custoTotal ?? 0)
+      }, 0)
+      addProductResolvedCusto.value = roundMoney(totalCost)
+      return
+    }
+
+    addProductResolvedCusto.value = product.custo
+  } finally {
+    if (resolveToken === addProductResolveToken) {
+      addProductKitCostLoading.value = false
+    }
   }
 }
 
@@ -1056,14 +1444,15 @@ function parseSuggestionNumber(value: number | string | null | undefined): numbe
   return Number.isNaN(parsed) ? null : parsed
 }
 
-async function fetchAddProductSuggestions(term: string) {
+async function fetchAddProductSuggestions(term: string, mode: AddProductSearchMode = addProductSearchMode.value) {
   addProductLoading.value = true
   addProductError.value = null
 
   try {
     const response = await $fetch<any[]>('/api/produtos/buscar', {
       query: {
-        q: term
+        q: term,
+        mode
       }
     })
 
@@ -1075,6 +1464,7 @@ async function fetchAddProductSuggestions(term: string) {
       if (!uniqueByCode.has(key)) {
         uniqueByCode.set(key, normalized)
       }
+      addProductSuggestionCache.set(key, normalized)
     })
 
     addProductSuggestions.value = Array.from(uniqueByCode.values())
@@ -1281,6 +1671,181 @@ function escapeHtml(value: string) {
     .replace(/'/g, '&#39;')
 }
 
+function exportProductsTablePdf() {
+  if (!import.meta.client) return
+
+  const rows = [...displayItems.value]
+  if (rows.length === 0) {
+    window.alert('Nao ha produtos exibidos para gerar o PDF.')
+    return
+  }
+
+  const generatedAt = new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date())
+
+  const reportTitle = `Tabela de produtos - ${activeTable.value?.title || 'Tabela de Preco'}`
+  const reportSubtitle = `${rows.length} item(ns) exibidos | Estoque por local: LOJA ASSU / DEPOSITO / LOJA MOSSORO | Gerado em ${generatedAt}`
+  const logoUrl = new URL('/LOGONEW .png', window.location.origin).toString()
+
+  const compactStockNumber = (value: number | null) => {
+    if (value === null || Number.isNaN(value)) return '-'
+    if (Number.isInteger(value)) return value.toString()
+    return value.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+  }
+
+  const buildPdfStockHtml = (item: TabelaPrecoItem) => {
+    const details = parsedDetalhamento(item.detalhamento_estoque)
+    if (details.length === 0) return '-'
+
+    const detailLines = details
+      .slice(0, 3)
+      .map((detail) => {
+        const code = extractCodeFromDetailLabel(detail.label) || detail.label
+        const assu = compactStockNumber(detail.assu)
+        const deposito = compactStockNumber(detail.deposito)
+        const mossoro = compactStockNumber(detail.mossoro)
+        if (details.length === 1) {
+          return `LOJA ASSU ${assu} | DEPOSITO ${deposito} | LOJA MOSSORO ${mossoro}`
+        }
+        return `${escapeHtml(code)}: LOJA ASSU ${assu} | DEPOSITO ${deposito} | LOJA MOSSORO ${mossoro}`
+      })
+      .join('<br>')
+
+    const hiddenCount = Math.max(details.length - 3, 0)
+    const hiddenSuffix = hiddenCount > 0 ? `<br>+${hiddenCount} variacao(oes)` : ''
+    return `${detailLines}${hiddenSuffix}`
+  }
+
+  const bodyHtml = rows.map((item) => {
+    const codigo = normalizeText(item.codigo)
+    const produto = normalizeText(item.produto)
+    const precoTabela = formatDecimal(item.preco_tabela)
+    const custo = formatDecimal(resolveItemCusto(item))
+    const dvv = formatDecimal(item.dvv_percentual)
+    const mc = formatDecimal(item.mc)
+    const qtdTotal = formatDecimal(resolveItemQuantidadeTotal(item))
+    const estoqueHtml = buildPdfStockHtml(item)
+
+    return `<tr>
+      <td>${escapeHtml(codigo)}</td>
+      <td>${escapeHtml(produto)}</td>
+      <td>${escapeHtml(precoTabela)}</td>
+      <td>${escapeHtml(custo)}</td>
+      <td>${escapeHtml(dvv)}</td>
+      <td>${escapeHtml(mc)}</td>
+      <td>${escapeHtml(qtdTotal)}</td>
+      <td>${estoqueHtml}</td>
+    </tr>`
+  }).join('')
+
+  const styleTagOpen = '<st' + 'yle>'
+  const styleTagClose = '</st' + 'yle>'
+  const html = `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>${escapeHtml(reportTitle)}</title>
+  ${styleTagOpen}
+    @page { size: A4 landscape; margin: 6mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, sans-serif; color: #0f172a; font-size: 9px; line-height: 1.2; }
+    .wrap { width: 100%; }
+    .header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .logo-wrap { display: flex; align-items: center; justify-content: center; width: 64px; height: 64px; padding: 0; border: none; border-radius: 0; box-shadow: none; background: transparent; }
+    .logo-wrap img { width: 64px; height: auto; object-fit: contain; display: block; }
+    .meta h1 { margin: 0; font-size: 13px; font-weight: 700; }
+    .sub { margin: 2px 0 0; font-size: 9px; color: #475569; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    thead { display: table-header-group; }
+    th, td { border: 1px solid #cbd5e1; padding: 3px 4px; vertical-align: top; word-break: break-word; }
+    th { background: #f1f5f9; text-align: left; font-weight: 700; font-size: 8.5px; }
+    tr { page-break-inside: avoid; break-inside: avoid; }
+    th:nth-child(1), td:nth-child(1) { width: 8%; }
+    th:nth-child(2), td:nth-child(2) { width: 32%; }
+    th:nth-child(3), td:nth-child(3),
+    th:nth-child(4), td:nth-child(4),
+    th:nth-child(5), td:nth-child(5),
+    th:nth-child(6), td:nth-child(6),
+    th:nth-child(7), td:nth-child(7) { width: 7%; text-align: right; }
+    th:nth-child(8), td:nth-child(8) { width: 25%; text-align: left; font-size: 8px; line-height: 1.2; white-space: normal; }
+  ${styleTagClose}
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div class="logo-wrap">
+        <img src="${logoUrl}" alt="Logo Lojao" />
+      </div>
+      <div class="meta">
+        <h1>${escapeHtml(reportTitle)}</h1>
+        <p class="sub">${escapeHtml(reportSubtitle)}</p>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Codigo</th>
+          <th>Produto</th>
+          <th>Preco Tabela</th>
+          <th>Custo</th>
+          <th>DVV %</th>
+          <th>MC</th>
+          <th>Qtd Total</th>
+          <th>Estoque por local</th>
+        </tr>
+      </thead>
+      <tbody>${bodyHtml}</tbody>
+    </table>
+  </div>
+</body>
+</html>`
+
+  const printWindow = window.open('', '_blank', 'width=1280,height=900')
+  if (!printWindow) {
+    window.alert('Nao foi possivel abrir a janela de impressao. Libere pop-ups para gerar o PDF.')
+    return
+  }
+
+  printWindow.document.open()
+  printWindow.document.write(html)
+  printWindow.document.close()
+
+  printWindow.addEventListener('afterprint', () => printWindow.close(), { once: true })
+
+  const triggerPrint = () => {
+    printWindow.focus()
+    printWindow.print()
+  }
+
+  const images = Array.from(printWindow.document.images)
+  if (images.length === 0) {
+    setTimeout(triggerPrint, 120)
+    return
+  }
+
+  let pendingImages = images.length
+  const onImageReady = () => {
+    pendingImages -= 1
+    if (pendingImages <= 0) {
+      setTimeout(triggerPrint, 120)
+    }
+  }
+
+  images.forEach((img) => {
+    if (img.complete) {
+      onImageReady()
+      return
+    }
+    img.addEventListener('load', onImageReady, { once: true })
+    img.addEventListener('error', onImageReady, { once: true })
+  })
+}
+
 function exportPendingRequestsPdf() {
   if (!import.meta.client) return
 
@@ -1448,6 +2013,167 @@ function historyResultLabel(request: TabelaPrecoSolicitacao) {
   return `Preco alterado de ${formatCurrency(request.preco_atual)} para ${formatCurrency(request.novo_preco)}.`
 }
 
+function normalizeKitComponentCode(value: string | null | undefined) {
+  return value?.trim().toUpperCase() || ''
+}
+
+function extractBaseCode(code: string) {
+  const normalized = normalizeKitComponentCode(code)
+  if (!normalized) return ''
+  return normalizeKitComponentCode(normalized.split('-')[0] ?? '')
+}
+
+function extractCodeFromDetailLabel(label: string) {
+  return normalizeKitComponentCode(label.split(/\s+/)[0] ?? '')
+}
+
+function hasKitKeyword(item: TabelaPrecoItem) {
+  return (item.produto ?? '').toUpperCase().includes('KIT')
+}
+
+function hasComponentLikeDetail(details: EstoqueDetalhe[]) {
+  return details.some((detail) => /^\d+(?:-\d+)*\b/.test(detail.label))
+}
+
+function parseKitQuantidades(raw: string | null | undefined): KitQuantidadeComponente[] {
+  if (!raw) return []
+
+  const matches = raw.matchAll(/([^\s]+)\s+QTD_COMPONENTE\s*=\s*(-?\d+(?:[.,]\d+)?)/gi)
+  const result: KitQuantidadeComponente[] = []
+
+  for (const match of matches) {
+    const codigo = normalizeKitComponentCode(match[1])
+    if (!codigo) continue
+
+    result.push({
+      codigo,
+      quantidade: parseDetailNumber(match[2])
+    })
+  }
+
+  return result
+}
+
+function kitComponents(item: TabelaPrecoItem): KitComponenteDetalhe[] {
+  const quantityRaw = item.quantidade_componente?.trim() || ''
+  const detailRaw = item.detalhamento_estoque?.trim() || ''
+  const cacheKey = `${quantityRaw}||${detailRaw}||${item.produto ?? ''}`
+
+  const cached = kitComponentCache.get(cacheKey)
+  if (cached) return cached
+
+  const quantityEntries = parseKitQuantidades(quantityRaw)
+  const details = parsedDetalhamento(detailRaw)
+  const isKitByDetailOnly = quantityEntries.length === 0
+    && hasKitKeyword(item)
+    && details.length > 0
+    && hasComponentLikeDetail(details)
+
+  if (quantityEntries.length === 0 && !isKitByDetailOnly) {
+    kitComponentCache.set(cacheKey, [])
+    return []
+  }
+  const detailByCode = new Map<string, EstoqueDetalhe>()
+
+  details.forEach((detail) => {
+    const code = extractCodeFromDetailLabel(detail.label)
+    if (!code || detailByCode.has(code)) return
+    detailByCode.set(code, detail)
+  })
+
+  const components: KitComponenteDetalhe[] = []
+  const includedCodes = new Set<string>()
+
+  quantityEntries.forEach((entry, index) => {
+    const detail = detailByCode.get(entry.codigo)
+    components.push({
+      key: `${entry.codigo}-${index}`,
+      codigo: entry.codigo,
+      label: detail?.label || entry.codigo,
+      quantidade: entry.quantidade,
+      assu: detail?.assu ?? null,
+      deposito: detail?.deposito ?? null,
+      mossoro: detail?.mossoro ?? null
+    })
+    includedCodes.add(entry.codigo)
+  })
+
+  detailByCode.forEach((detail, code) => {
+    if (includedCodes.has(code)) return
+    components.push({
+      key: `${code}-detail`,
+      codigo: code,
+      label: detail.label,
+      quantidade: null,
+      assu: detail.assu,
+      deposito: detail.deposito,
+      mossoro: detail.mossoro
+    })
+  })
+
+  kitComponentCache.set(cacheKey, components)
+  return components
+}
+
+function isKitItem(item: TabelaPrecoItem) {
+  return kitComponents(item).length > 0
+}
+
+function formatComponentQuantity(value: number | null) {
+  if (value === null || Number.isNaN(value)) return '-'
+  if (Number.isInteger(value)) return value.toString()
+
+  return value.toLocaleString('pt-BR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  })
+}
+
+function resolveComponentTotalStock(component: KitComponenteDetalhe): number | null {
+  const localStocks = [component.assu, component.deposito, component.mossoro]
+    .filter((value): value is number => value !== null && !Number.isNaN(value))
+
+  if (localStocks.length > 0) {
+    return localStocks.reduce((total, value) => total + value, 0)
+  }
+
+  const componentCode = normalizeKitComponentCode(component.codigo)
+  const componentBaseCode = extractBaseCode(componentCode)
+  const rowFromCode = componentCode ? itemsByCode.value.get(componentCode) : undefined
+  const rowFromBaseCode = componentBaseCode ? itemsByCode.value.get(componentBaseCode) : undefined
+  const fallbackStock = parseSuggestionNumber(
+    rowFromCode?.quantidade_disponivel_total ?? rowFromBaseCode?.quantidade_disponivel_total ?? null
+  )
+
+  if (fallbackStock === null) return null
+  return fallbackStock
+}
+
+function resolveItemQuantidadeTotal(item: TabelaPrecoItem): number | string | null {
+  if (!isKitItem(item)) return item.quantidade_disponivel_total
+
+  const kitPossibilidades: number[] = []
+  kitComponents(item).forEach((component) => {
+    const quantidadeComponente = parseSuggestionNumber(component.quantidade)
+    if (quantidadeComponente === null || quantidadeComponente <= 0) return
+
+    const componentStock = resolveComponentTotalStock(component)
+    if (componentStock === null) return
+
+    kitPossibilidades.push(Math.max(Math.floor(componentStock / quantidadeComponente), 0))
+  })
+
+  if (kitPossibilidades.length === 0) {
+    return item.quantidade_disponivel_total
+  }
+
+  return Math.min(...kitPossibilidades)
+}
+
+function resolveItemCusto(item: TabelaPrecoItem) {
+  return item.custo
+}
+
 function formatStockQuantity(value: number | null) {
   if (value === null || Number.isNaN(value)) return '-'
   if (Number.isInteger(value)) return value.toString()
@@ -1484,29 +2210,45 @@ function parsedDetalhamento(raw: string | null | undefined): EstoqueDetalhe[] {
     .replace(/\s{2,}/g, ' ')
     .trim()
 
-  const gradeSegments = compact.match(/\d+-\d+\s+.*?(?=(?:\s*\d+-\d+\s+)|$)/g) ?? []
-  const segments = gradeSegments.length > 0 ? gradeSegments : [compact]
+  const blockPattern = /(.+?)\s+ESTOQUE\s+ASSU\s*=\s*(-?\d+(?:[.,]\d+)?)\s+ESTOQUE\s+DEPOSITO\s*=\s*(-?\d+(?:[.,]\d+)?)\s+ESTOQUE\s+MOSSORO\s*=\s*(-?\d+(?:[.,]\d+)?)(?=\s+\d+(?:-\d+)*\s+|$)/gi
+  const parsedFromBlocks: EstoqueDetalhe[] = []
 
-  const parsed = segments
-    .map((segment, index) => {
-      const clean = segment.trim()
-      const labelBase = clean.replace(/\s*ESTOQUE\s+ASSU\s*=.*$/i, '').trim()
-      const label = labelBase || (gradeSegments.length > 0 ? `Variacao ${index + 1}` : 'Saldo')
-      const assu = extractStock(clean, 'ASSU')
-      const deposito = extractStock(clean, 'DEPOSITO')
-      const mossoro = extractStock(clean, 'MOSSORO')
+  let blockMatch: RegExpExecArray | null
+  while ((blockMatch = blockPattern.exec(compact)) !== null) {
+    const labelBase = blockMatch[1]?.trim() || ''
+    const assu = parseDetailNumber(blockMatch[2])
+    const deposito = parseDetailNumber(blockMatch[3])
+    const mossoro = parseDetailNumber(blockMatch[4])
 
-      if (assu === null && deposito === null && mossoro === null) return null
+    if (assu === null && deposito === null && mossoro === null) continue
 
-      return {
-        key: `${label}-${index}`,
-        label,
-        assu,
-        deposito,
-        mossoro
-      }
+    parsedFromBlocks.push({
+      key: `${labelBase || 'Saldo'}-${parsedFromBlocks.length}`,
+      label: labelBase || 'Saldo',
+      assu,
+      deposito,
+      mossoro
     })
-    .filter((entry): entry is EstoqueDetalhe => entry !== null)
+  }
+
+  if (parsedFromBlocks.length > 0) {
+    detailCache.set(cacheKey, parsedFromBlocks)
+    return parsedFromBlocks
+  }
+
+  const assu = extractStock(compact, 'ASSU')
+  const deposito = extractStock(compact, 'DEPOSITO')
+  const mossoro = extractStock(compact, 'MOSSORO')
+
+  const parsed = (assu === null && deposito === null && mossoro === null)
+    ? []
+    : [{
+      key: 'Saldo-0',
+      label: compact.replace(/\s*ESTOQUE\s+ASSU\s*=.*$/i, '').trim() || 'Saldo',
+      assu,
+      deposito,
+      mossoro
+    }]
 
   detailCache.set(cacheKey, parsed)
   return parsed

@@ -1,5 +1,7 @@
 import { createError, getQuery } from 'h3'
 
+type SearchMode = 'codigo' | 'descricao' | 'ambos'
+
 type ProdutoBusca = {
   codigo: string;
   produto: string;
@@ -10,6 +12,7 @@ type ProdutoBusca = {
   mc: number | null;
   quantidade_disponivel_total: number | null;
   detalhamento_estoque: string | null;
+  quantidade_componente: string | null;
 }
 
 type FetchErrorLike = {
@@ -21,13 +24,80 @@ type FetchErrorLike = {
   message?: string;
 }
 
+function normalizeSearchMode(value: unknown): SearchMode {
+  const mode = String(value ?? '').trim().toLowerCase()
+  if (mode === 'descricao') return 'descricao'
+  if (mode === 'ambos') return 'ambos'
+  return 'codigo'
+}
+
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function tokenizeSearchTerm(term: string): string[] {
+  return normalizeSearchText(term)
+    .split(' ')
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0)
+}
+
+function hasAllTokens(text: string, tokens: string[]): boolean {
+  if (tokens.length === 0) return false
+  return tokens.every((token) => text.includes(token))
+}
+
+function getSearchScore(entry: ProdutoBusca, termLower: string, mode: SearchMode, tokens: string[]): number {
+  const code = normalizeSearchText(entry.codigo)
+  const product = normalizeSearchText(entry.produto)
+  const tokenMatchOnProduct = hasAllTokens(product, tokens)
+  const tokenMatchOnCode = hasAllTokens(code, tokens)
+
+  if (mode === 'codigo') {
+    if (code === termLower) return 0
+    if (code.startsWith(termLower)) return 1
+    if (code.includes(termLower)) return 2
+    if (tokens.length > 1 && tokenMatchOnCode) return 3
+    return Number.POSITIVE_INFINITY
+  }
+
+  if (mode === 'descricao') {
+    if (product === termLower) return 0
+    if (product.startsWith(termLower)) return 1
+    if (product.includes(termLower)) return 2
+    if (tokens.length > 1 && tokenMatchOnProduct) return 3
+    return Number.POSITIVE_INFINITY
+  }
+
+  if (code === termLower) return 0
+  if (code.startsWith(termLower)) return 1
+  if (code.includes(termLower)) return 2
+  if (product === termLower) return 3
+  if (product.startsWith(termLower)) return 4
+  if (product.includes(termLower)) return 5
+  if (tokens.length > 1 && tokenMatchOnProduct) return 6
+  if (tokens.length > 1 && tokenMatchOnCode) return 7
+  return Number.POSITIVE_INFINITY
+}
+
 function toList(payload: any): any[] {
   if (Array.isArray(payload)) return payload
+  if (Array.isArray(payload?.value)) return payload.value
   if (Array.isArray(payload?.items)) return payload.items
   if (Array.isArray(payload?.data)) return payload.data
   if (Array.isArray(payload?.result)) return payload.result
   if (Array.isArray(payload?.produtos)) return payload.produtos
   if (Array.isArray(payload?.response)) return payload.response
+  if (payload && typeof payload === 'object') {
+    const hasCodigo = payload.codigo !== undefined && payload.codigo !== null
+    const hasProduto = payload.produto !== undefined && payload.produto !== null
+    if (hasCodigo || hasProduto) return [payload]
+  }
   return []
 }
 
@@ -94,7 +164,8 @@ function normalizeProduto(entry: any): ProdutoBusca | null {
     dvv_percentual: toNumber(entry?.dvv_percentual),
     mc: toNumber(entry?.mc),
     quantidade_disponivel_total: toNumber(entry?.quantidade_disponivel_total),
-    detalhamento_estoque: toText(entry?.detalhamento_estoque)
+    detalhamento_estoque: toText(entry?.detalhamento_estoque),
+    quantidade_componente: toText(entry?.quantidade_componente)
   }
 }
 
@@ -110,9 +181,38 @@ function getFetchErrorMessage(error: unknown): string {
   return 'Falha ao consultar o catalogo de produtos.'
 }
 
+async function queryWebhookProducts(webhookUrl: string, term: string) {
+  const searchParams = { busca: term }
+  let postError: unknown = null
+
+  try {
+    return await $fetch<any>(webhookUrl, {
+      method: 'POST',
+      body: searchParams
+    })
+  } catch (errorPost) {
+    postError = errorPost
+    try {
+      return await $fetch<any>(webhookUrl, {
+        method: 'GET',
+        query: searchParams
+      })
+    } catch (errorGet) {
+      const message = [getFetchErrorMessage(postError), getFetchErrorMessage(errorGet)]
+        .find((entry) => entry && entry !== 'Falha ao consultar o catalogo de produtos.')
+        || 'Falha ao consultar o catalogo de produtos.'
+      throw createError({
+        statusCode: 502,
+        statusMessage: message
+      })
+    }
+  }
+}
+
 export default defineEventHandler(async (event): Promise<ProdutoBusca[]> => {
   const query = getQuery(event)
   const term = String(query.q ?? '').trim()
+  const mode = normalizeSearchMode(query.mode)
 
   if (term.length < 2) return []
 
@@ -126,38 +226,30 @@ export default defineEventHandler(async (event): Promise<ProdutoBusca[]> => {
     })
   }
 
-  const searchParams = {
-    busca: term
+  const payload = await queryWebhookProducts(webhookUrl, term)
+
+  let sourceEntries = toList(payload)
+  const tokens = tokenizeSearchTerm(term)
+
+  // Em buscas com mais de uma palavra, combina também resultados por token
+  // para compensar limitações do filtro do webhook.
+  if (tokens.length > 1 && mode !== 'codigo') {
+    const uniqueTokens = Array.from(new Set(tokens)).slice(0, 4)
+    const tokenPayloads = await Promise.all(
+      uniqueTokens.map(async (token) => {
+        try {
+          return await queryWebhookProducts(webhookUrl, token)
+        } catch {
+          return null
+        }
+      })
+    )
+
+    const tokenEntries = tokenPayloads.flatMap((tokenPayload) => toList(tokenPayload))
+    sourceEntries = [...sourceEntries, ...tokenEntries]
   }
 
-  let payload: any
-  let postError: unknown = null
-  let getError: unknown = null
-  try {
-    payload = await $fetch<any>(webhookUrl, {
-      method: 'POST',
-      body: searchParams
-    })
-  } catch (error) {
-    postError = error
-    try {
-      payload = await $fetch<any>(webhookUrl, {
-        method: 'GET',
-        query: searchParams
-      })
-    } catch (errorGet) {
-      getError = errorGet
-      const message = [getFetchErrorMessage(postError), getFetchErrorMessage(getError)]
-        .find((entry) => entry && entry !== 'Falha ao consultar o catalogo de produtos.')
-        || 'Falha ao consultar o catalogo de produtos.'
-      throw createError({
-        statusCode: 502,
-        statusMessage: message
-      })
-    }
-  }
-
-  const normalized = toList(payload)
+  const normalized = sourceEntries
     .map(normalizeProduto)
     .filter((entry): entry is ProdutoBusca => entry !== null)
 
@@ -169,13 +261,20 @@ export default defineEventHandler(async (event): Promise<ProdutoBusca[]> => {
     }
   })
 
-  const termLower = term.toLowerCase()
+  const termLower = normalizeSearchText(term)
   return Array.from(deduped.values())
-    .filter((entry) => {
-      return (
-        entry.codigo.toLowerCase().includes(termLower) ||
-        entry.produto.toLowerCase().includes(termLower)
-      )
+    .map((entry) => ({
+      entry,
+      score: getSearchScore(entry, termLower, mode, tokens)
+    }))
+    .filter((item) => Number.isFinite(item.score))
+    .sort((a, b) => {
+      if (a.score !== b.score) return a.score - b.score
+      if (a.entry.codigo.length !== b.entry.codigo.length) {
+        return a.entry.codigo.length - b.entry.codigo.length
+      }
+      return a.entry.codigo.localeCompare(b.entry.codigo, 'pt-BR')
     })
+    .map((item) => item.entry)
     .slice(0, 30)
 })

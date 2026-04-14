@@ -56,6 +56,7 @@ export interface TabelaPrecoItem {
     mc: number | string | null;
     quantidade_disponivel_total: number | string | null;
     detalhamento_estoque: string | null;
+    quantidade_componente: string | null;
 }
 
 export type SolicitacaoAcao = 'alterar_preco' | 'excluir' | 'adicionar_produto';
