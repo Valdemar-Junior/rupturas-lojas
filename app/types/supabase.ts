@@ -81,3 +81,34 @@ export interface TabelaPrecoSolicitacao {
     created_at: string;
     updated_at: string;
 }
+
+export interface TituloFinanceiro {
+    id: number;
+    chave_unica: string;
+    titulo_id: number;
+    baixa_id: number | null;
+    numero_titulo: string | null;
+    sufixo: number | null;
+    data_emissao: string | null;
+    data_vencimento: string | null;
+    data_ultimo_pagamento: string | null;
+    valor_nominal: number | null;
+    valor_pago: number | null;
+    valor_pendente: number | null;
+    complemento: string | null;
+    situacao_titulo: string | null;
+    fornecedor: string | null;
+    tipo_titulo: string | null;
+    forma_pagamento: string | null;
+    data_baixa: string | null;
+    valor_baixa: number | null;
+    usuario_login: string | null;
+    usuario_nome: string | null;
+    origem_lancamento: string | null;
+    tipo_movimento: string | null;
+    conta_caixa: string | null;
+    tipo_conta: string | null;
+    historico: string | null;
+    created_at: string;
+    updated_at: string;
+}

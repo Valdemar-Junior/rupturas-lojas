@@ -34,6 +34,15 @@
             >
               Tabela de Preco
             </NuxtLink>
+            <NuxtLink
+              to="/financeiro/titulos"
+              :class="[
+                'rounded-full px-3 py-1 text-xs font-semibold transition',
+                isFinanceiroRoute ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900'
+              ]"
+            >
+              Financeiro
+            </NuxtLink>
           </nav>
 
           <div class="hidden lg:flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
@@ -56,4 +65,5 @@ const route = useRoute()
 
 const isRupturasRoute = computed(() => route.path === '/')
 const isTabelaPrecoRoute = computed(() => route.path.startsWith('/tabela-preco'))
+const isFinanceiroRoute = computed(() => route.path.startsWith('/financeiro'))
 </script>
