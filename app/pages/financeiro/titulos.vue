@@ -1,5 +1,7 @@
 <template>
   <div class="space-y-7">
+    <FinanceiroNavTabs class="print-hide" />
+
     <section class="relative overflow-hidden rounded-3xl border border-slate-200/70 bg-gradient-to-br from-slate-950 via-slate-900 to-cyan-900 px-6 py-7 text-white sm:px-8">
       <div class="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-cyan-400/25 blur-3xl"></div>
       <div class="absolute -left-8 -bottom-16 h-44 w-44 rounded-full bg-orange-300/20 blur-3xl"></div>
@@ -195,6 +197,7 @@ import FinanceInsightCard from '~/components/financeiro/FinanceInsightCard.vue'
 import FinanceCharts from '~/components/financeiro/FinanceCharts.vue'
 import FinanceTitlesTable from '~/components/financeiro/FinanceTitlesTable.vue'
 import FinanceTitleDrawer from '~/components/financeiro/FinanceTitleDrawer.vue'
+import FinanceiroNavTabs from '~/components/financeiro/FinanceiroNavTabs.vue'
 
 definePageMeta({
   scrollToTop: true

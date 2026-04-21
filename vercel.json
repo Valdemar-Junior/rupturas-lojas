@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/financeiro/relatorio/disparar",
+      "schedule": "0 20 * * *"
+    }
+  ]
+}
