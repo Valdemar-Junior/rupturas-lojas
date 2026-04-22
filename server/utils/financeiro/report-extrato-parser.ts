@@ -102,8 +102,21 @@ async function ensurePdfDomPolyfills(): Promise<void> {
   }
 }
 
+async function ensurePdfWorkerModule(): Promise<void> {
+  const g = globalThis as { pdfjsWorker?: { WorkerMessageHandler?: unknown } }
+  if (g.pdfjsWorker?.WorkerMessageHandler) return
+
+  try {
+    const workerModule = await import('pdfjs-dist/legacy/build/pdf.worker.mjs')
+    g.pdfjsWorker = workerModule as { WorkerMessageHandler?: unknown }
+  } catch {
+    // Fallback segue sem worker preload.
+  }
+}
+
 async function extractTextWithPdfJsNoWorker(fileBuffer: Buffer): Promise<string> {
   await ensurePdfDomPolyfills()
+  await ensurePdfWorkerModule()
   const pdfjs = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfJsModule
   const task = pdfjs.getDocument({
     data: new Uint8Array(fileBuffer),
@@ -323,6 +336,7 @@ export async function extractCreditEntriesFromPdf(fileBuffer: Buffer, referenceD
   let pdfModule: PdfParseModule
   try {
     await ensurePdfDomPolyfills()
+    await ensurePdfWorkerModule()
     pdfModule = await import('pdf-parse')
   } catch (error: any) {
     const detail = error?.message ? ` Detalhe: ${error.message}` : ''
