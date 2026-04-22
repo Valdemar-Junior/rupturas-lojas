@@ -63,6 +63,22 @@ type PdfParseModule = {
   }
 }
 
+type PdfJsTextItem = { str?: string; hasEOL?: boolean }
+type PdfJsPage = {
+  getTextContent: (params?: Record<string, unknown>) => Promise<{ items: PdfJsTextItem[] }>
+  cleanup: () => void
+}
+type PdfJsDoc = {
+  numPages: number
+  getPage: (pageNumber: number) => Promise<PdfJsPage>
+  destroy: () => Promise<void>
+}
+type PdfJsModule = {
+  getDocument: (options: Record<string, unknown>) => {
+    promise: Promise<PdfJsDoc>
+  }
+}
+
 async function ensurePdfDomPolyfills(): Promise<void> {
   const g = globalThis as {
     DOMMatrix?: unknown
@@ -84,6 +100,40 @@ async function ensurePdfDomPolyfills(): Promise<void> {
   } catch {
     // Se falhar, o import do parser abaixo devolvera erro com detalhe explicito.
   }
+}
+
+async function extractTextWithPdfJsNoWorker(fileBuffer: Buffer): Promise<string> {
+  await ensurePdfDomPolyfills()
+  const pdfjs = (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfJsModule
+  const task = pdfjs.getDocument({
+    data: new Uint8Array(fileBuffer),
+    disableWorker: true
+  })
+
+  const doc = await task.promise
+  const pages: string[] = []
+
+  try {
+    for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber += 1) {
+      const page = await doc.getPage(pageNumber)
+      const content = await page.getTextContent({
+        includeMarkedContent: false,
+        disableNormalization: false
+      })
+
+      const line = content.items
+        .map((item) => `${item?.str || ''}${item?.hasEOL ? '\n' : ''}`)
+        .join(' ')
+        .trim()
+
+      if (line) pages.push(line)
+      page.cleanup()
+    }
+  } finally {
+    await doc.destroy()
+  }
+
+  return pages.join('\n')
 }
 
 function normalizeText(value: string): string {
@@ -297,11 +347,27 @@ export async function extractCreditEntriesFromPdf(fileBuffer: Buffer, referenceD
     const data = await parser.getText()
     text = data.text || ''
   } catch (error: any) {
-    const detail = error?.message ? ` Detalhe: ${error.message}` : ''
-    throw createError({
-      statusCode: 422,
-      statusMessage: `Falha ao ler o conteudo textual do PDF.${detail}`
-    })
+    const message = String(error?.message || '')
+    const workerError = message.toLowerCase().includes('worker')
+      || message.toLowerCase().includes('pdf.worker')
+
+    if (workerError) {
+      try {
+        text = await extractTextWithPdfJsNoWorker(fileBuffer)
+      } catch (fallbackError: any) {
+        const detail = fallbackError?.message ? ` Detalhe: ${fallbackError.message}` : ''
+        throw createError({
+          statusCode: 422,
+          statusMessage: `Falha ao ler o conteudo textual do PDF.${detail}`
+        })
+      }
+    } else {
+      const detail = message ? ` Detalhe: ${message}` : ''
+      throw createError({
+        statusCode: 422,
+        statusMessage: `Falha ao ler o conteudo textual do PDF.${detail}`
+      })
+    }
   } finally {
     await parser.destroy()
   }
