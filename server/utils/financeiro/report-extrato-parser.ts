@@ -63,6 +63,29 @@ type PdfParseModule = {
   }
 }
 
+async function ensurePdfDomPolyfills(): Promise<void> {
+  const g = globalThis as {
+    DOMMatrix?: unknown
+    DOMPoint?: unknown
+    DOMRect?: unknown
+    ImageData?: unknown
+    Path2D?: unknown
+  }
+
+  if (g.DOMMatrix && g.ImageData && g.Path2D) return
+
+  try {
+    const canvas = await import('@napi-rs/canvas')
+    g.DOMMatrix = g.DOMMatrix || (canvas as any).DOMMatrix
+    g.DOMPoint = g.DOMPoint || (canvas as any).DOMPoint
+    g.DOMRect = g.DOMRect || (canvas as any).DOMRect
+    g.ImageData = g.ImageData || (canvas as any).ImageData
+    g.Path2D = g.Path2D || (canvas as any).Path2D
+  } catch {
+    // Se falhar, o import do parser abaixo devolvera erro com detalhe explicito.
+  }
+}
+
 function normalizeText(value: string): string {
   return value
     .normalize('NFD')
@@ -249,6 +272,7 @@ export async function extractCreditEntriesFromPdf(fileBuffer: Buffer, referenceD
 
   let pdfModule: PdfParseModule
   try {
+    await ensurePdfDomPolyfills()
     pdfModule = await import('pdf-parse')
   } catch (error: any) {
     const detail = error?.message ? ` Detalhe: ${error.message}` : ''
