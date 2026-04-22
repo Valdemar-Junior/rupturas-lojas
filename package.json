@@ -2,6 +2,9 @@
   "name": "rupturas-lojas",
   "type": "module",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev --port 3010 --host 127.0.0.1 --open",

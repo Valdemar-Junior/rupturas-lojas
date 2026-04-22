@@ -1,4 +1,3 @@
-import { PDFParse } from 'pdf-parse'
 import { createError } from 'h3'
 
 export interface ParsedExtratoCredito {
@@ -56,6 +55,13 @@ const IGNORE_LINE_HINTS = [
   '-- 2 of',
   '-- 3 of'
 ]
+
+type PdfParseModule = {
+  PDFParse?: new (options: { data: Buffer }) => {
+    getText: () => Promise<{ text?: string | null }>
+    destroy: () => Promise<void>
+  }
+}
 
 function normalizeText(value: string): string {
   return value
@@ -241,12 +247,37 @@ export async function extractCreditEntriesFromPdf(fileBuffer: Buffer, referenceD
     })
   }
 
-  const parser = new PDFParse({ data: fileBuffer })
+  let pdfModule: PdfParseModule
+  try {
+    pdfModule = await import('pdf-parse')
+  } catch (error: any) {
+    const detail = error?.message ? ` Detalhe: ${error.message}` : ''
+    throw createError({
+      statusCode: 422,
+      statusMessage: `Falha ao inicializar leitura de PDF no servidor.${detail} Configure Node.js 22.x no deploy da Vercel e tente novamente.`
+    })
+  }
+
+  const ParserCtor = pdfModule.PDFParse
+  if (!ParserCtor) {
+    throw createError({
+      statusCode: 422,
+      statusMessage: 'Biblioteca de leitura de PDF indisponivel no servidor. Verifique instalacao/deploy das dependencias.'
+    })
+  }
+
+  const parser = new ParserCtor({ data: fileBuffer })
   let text = ''
 
   try {
     const data = await parser.getText()
     text = data.text || ''
+  } catch (error: any) {
+    const detail = error?.message ? ` Detalhe: ${error.message}` : ''
+    throw createError({
+      statusCode: 422,
+      statusMessage: `Falha ao ler o conteudo textual do PDF.${detail}`
+    })
   } finally {
     await parser.destroy()
   }
