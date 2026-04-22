@@ -1,4 +1,4 @@
-import { createError, readMultipartFormData } from 'h3'
+import { createError } from 'h3'
 import { extractCreditEntriesFromPdf } from '~~/server/utils/financeiro/report-extrato-parser'
 import { getExtratoOriginalPdfByDate, saveExtratoOriginalPdf } from '~~/server/utils/financeiro/report-extrato-file'
 import { getDateInFortaleza } from '~~/server/utils/financeiro/report-types'
@@ -41,32 +41,37 @@ function parseBool(value: string | undefined, fallback: boolean): boolean {
 }
 
 export default defineEventHandler(async (event) => {
-  const parts = await readMultipartFormData(event)
-
-  if (!parts || parts.length === 0) {
+  let formData: FormData
+  try {
+    formData = await event.request.formData()
+  } catch {
     throw createError({
       statusCode: 400,
       statusMessage: 'Envie um form-data multipart com o arquivo PDF.'
     })
   }
 
-  const filePart = parts.find((part) => part.name === 'file' && part.filename)
-  if (!filePart?.data) {
+  const filePart = formData.get('file')
+  if (!(filePart instanceof File)) {
     throw createError({
       statusCode: 400,
       statusMessage: 'Arquivo PDF nao encontrado no campo "file".'
     })
   }
 
-  const dataPart = parts.find((part) => part.name === 'data_referencia')
-  const bancoPart = parts.find((part) => part.name === 'banco')
-  const substituirPart = parts.find((part) => part.name === 'substituir')
+  const fileBuffer = Buffer.from(await filePart.arrayBuffer())
+  if (!fileBuffer || fileBuffer.length === 0) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Arquivo PDF vazio no campo "file".'
+    })
+  }
 
-  const dataReferencia = sanitizeDate(dataPart?.data?.toString('utf-8'))
-  const banco = bancoPart?.data?.toString('utf-8')?.trim() || 'Conta principal'
-  const substituir = parseBool(substituirPart?.data?.toString('utf-8'), true)
+  const dataReferencia = sanitizeDate(String(formData.get('data_referencia') || ''))
+  const banco = String(formData.get('banco') || '').trim() || 'Conta principal'
+  const substituir = parseBool(String(formData.get('substituir') || ''), true)
 
-  const creditos = await extractCreditEntriesFromPdf(Buffer.from(filePart.data), dataReferencia)
+  const creditos = await extractCreditEntriesFromPdf(fileBuffer, dataReferencia)
 
   const supabase = getFinanceiroSupabaseServiceClient()
   const extratoTable = getConfiguredExtratoTable()
@@ -122,9 +127,9 @@ export default defineEventHandler(async (event) => {
   await saveExtratoOriginalPdf({
     dataReferencia,
     banco,
-    fileName: filePart.filename || `extrato_${dataReferencia}.pdf`,
+    fileName: filePart.name || `extrato_${dataReferencia}.pdf`,
     mimeType: filePart.type || 'application/pdf',
-    fileBuffer: Buffer.from(filePart.data)
+    fileBuffer
   })
 
   const extratoPersistido = await getExtratoOriginalPdfByDate(dataReferencia)
