@@ -40,6 +40,18 @@ function parseBool(value: string | undefined, fallback: boolean): boolean {
   return fallback
 }
 
+type FileLikePart = {
+  name?: string
+  type?: string
+  arrayBuffer: () => Promise<ArrayBuffer>
+}
+
+function isFileLikePart(value: unknown): value is FileLikePart {
+  if (!value || typeof value !== 'object') return false
+  const typed = value as { arrayBuffer?: unknown }
+  return typeof typed.arrayBuffer === 'function'
+}
+
 export default defineEventHandler(async (event) => {
   let formData: FormData
   try {
@@ -52,7 +64,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const filePart = formData.get('file')
-  if (!(filePart instanceof File)) {
+  if (!isFileLikePart(filePart)) {
     throw createError({
       statusCode: 400,
       statusMessage: 'Arquivo PDF nao encontrado no campo "file".'
@@ -127,8 +139,8 @@ export default defineEventHandler(async (event) => {
   await saveExtratoOriginalPdf({
     dataReferencia,
     banco,
-    fileName: filePart.name || `extrato_${dataReferencia}.pdf`,
-    mimeType: filePart.type || 'application/pdf',
+    fileName: (filePart.name || '').trim() || `extrato_${dataReferencia}.pdf`,
+    mimeType: (filePart.type || '').trim() || 'application/pdf',
     fileBuffer
   })
 
