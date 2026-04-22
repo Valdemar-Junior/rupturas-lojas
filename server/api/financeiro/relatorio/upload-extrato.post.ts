@@ -1,4 +1,4 @@
-import { createError } from 'h3'
+import { createError, readMultipartFormData } from 'h3'
 import { extractCreditEntriesFromPdf } from '~~/server/utils/financeiro/report-extrato-parser'
 import { getExtratoOriginalPdfByDate, saveExtratoOriginalPdf } from '~~/server/utils/financeiro/report-extrato-file'
 import { getDateInFortaleza } from '~~/server/utils/financeiro/report-types'
@@ -52,26 +52,67 @@ function isFileLikePart(value: unknown): value is FileLikePart {
   return typeof typed.arrayBuffer === 'function'
 }
 
-export default defineEventHandler(async (event) => {
-  let formData: FormData
+type MultipartUploadPayload = {
+  fileBuffer: Buffer
+  fileName: string
+  fileType: string
+  dataReferenciaRaw: string
+  bancoRaw: string
+  substituirRaw: string
+}
+
+async function readUploadPayload(event: Parameters<typeof defineEventHandler>[0]): Promise<MultipartUploadPayload | null> {
   try {
-    formData = await event.request.formData()
+    const parts = await readMultipartFormData(event)
+    if (parts && parts.length > 0) {
+      const filePart = parts.find((part) => part.name === 'file' && part.filename && part.data)
+      if (!filePart?.data) return null
+
+      const dataPart = parts.find((part) => part.name === 'data_referencia')
+      const bancoPart = parts.find((part) => part.name === 'banco')
+      const substituirPart = parts.find((part) => part.name === 'substituir')
+
+      return {
+        fileBuffer: Buffer.from(filePart.data),
+        fileName: (filePart.filename || '').trim(),
+        fileType: (filePart.type || '').trim(),
+        dataReferenciaRaw: dataPart?.data?.toString('utf-8') || '',
+        bancoRaw: bancoPart?.data?.toString('utf-8') || '',
+        substituirRaw: substituirPart?.data?.toString('utf-8') || ''
+      }
+    }
   } catch {
+    // fallback abaixo
+  }
+
+  try {
+    const formData = await event.request.formData()
+    const filePart = formData.get('file')
+    if (!isFileLikePart(filePart)) return null
+
+    return {
+      fileBuffer: Buffer.from(await filePart.arrayBuffer()),
+      fileName: (filePart.name || '').trim(),
+      fileType: (filePart.type || '').trim(),
+      dataReferenciaRaw: String(formData.get('data_referencia') || ''),
+      bancoRaw: String(formData.get('banco') || ''),
+      substituirRaw: String(formData.get('substituir') || '')
+    }
+  } catch {
+    return null
+  }
+}
+
+export default defineEventHandler(async (event) => {
+  const upload = await readUploadPayload(event)
+  if (!upload) {
     throw createError({
       statusCode: 400,
       statusMessage: 'Envie um form-data multipart com o arquivo PDF.'
     })
   }
 
-  const filePart = formData.get('file')
-  if (!isFileLikePart(filePart)) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'Arquivo PDF nao encontrado no campo "file".'
-    })
-  }
-
-  const fileBuffer = Buffer.from(await filePart.arrayBuffer())
+  const fileBuffer = upload.fileBuffer
   if (!fileBuffer || fileBuffer.length === 0) {
     throw createError({
       statusCode: 400,
@@ -79,9 +120,9 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const dataReferencia = sanitizeDate(String(formData.get('data_referencia') || ''))
-  const banco = String(formData.get('banco') || '').trim() || 'Conta principal'
-  const substituir = parseBool(String(formData.get('substituir') || ''), true)
+  const dataReferencia = sanitizeDate(upload.dataReferenciaRaw)
+  const banco = upload.bancoRaw.trim() || 'Conta principal'
+  const substituir = parseBool(upload.substituirRaw, true)
 
   const creditos = await extractCreditEntriesFromPdf(fileBuffer, dataReferencia)
 
@@ -139,8 +180,8 @@ export default defineEventHandler(async (event) => {
   await saveExtratoOriginalPdf({
     dataReferencia,
     banco,
-    fileName: (filePart.name || '').trim() || `extrato_${dataReferencia}.pdf`,
-    mimeType: (filePart.type || '').trim() || 'application/pdf',
+    fileName: upload.fileName || `extrato_${dataReferencia}.pdf`,
+    mimeType: upload.fileType || 'application/pdf',
     fileBuffer
   })
 
