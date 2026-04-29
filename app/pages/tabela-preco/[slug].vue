@@ -1623,6 +1623,22 @@ function requestActionLabel(action: TabelaPrecoSolicitacao['acao']) {
   return 'Adicionar produto'
 }
 
+function requestActionPriority(action: TabelaPrecoSolicitacao['acao']) {
+  if (action === 'adicionar_produto') return 0
+  if (action === 'alterar_preco') return 1
+  return 2
+}
+
+function requestActionBadgeHtml(action: TabelaPrecoSolicitacao['acao']) {
+  if (action === 'adicionar_produto') {
+    return '<span class="action-badge action-add">Adicionar</span>'
+  }
+  if (action === 'alterar_preco') {
+    return '<span class="action-badge action-change">Alterar preco</span>'
+  }
+  return '<span class="action-badge action-delete">Excluir produto</span>'
+}
+
 function escapeHtml(value: string) {
   return value
     .replace(/&/g, '&amp;')
@@ -1811,7 +1827,11 @@ function exportPendingRequestsPdf() {
   if (!import.meta.client) return
 
   const requests = [...solicitacoesPendentes.value]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .sort((a, b) => {
+      const byAction = requestActionPriority(a.acao) - requestActionPriority(b.acao)
+      if (byAction !== 0) return byAction
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    })
 
   if (requests.length === 0) {
     window.alert('Nao ha solicitacoes pendentes para gerar o PDF.')
@@ -1836,16 +1856,14 @@ function exportPendingRequestsPdf() {
     const solicitante = request.solicitante?.trim() || 'nao informado'
     const detalhes = describeRequest(request)
     const observacao = request.observacao?.trim() || '-'
-    const relatedCodes = relatedCodesFromRequest(request)
-    const relatedCodesLabel = relatedCodes.length > 0 ? relatedCodes.join(', ') : '-'
+    const actionBadge = requestActionBadgeHtml(request.acao)
 
     return `<tr>
       <td>${escapeHtml(formatDateTime(request.created_at))}</td>
-      <td>${escapeHtml(requestActionLabel(request.acao))}</td>
+      <td>${actionBadge}</td>
       <td>${escapeHtml(codigo)}</td>
       <td>${escapeHtml(produto)}</td>
       <td>${escapeHtml(solicitante)}</td>
-      <td>${escapeHtml(relatedCodesLabel)}</td>
       <td>${escapeHtml(detalhes)}</td>
       <td>${escapeHtml(observacao)}</td>
     </tr>`
@@ -1874,6 +1892,10 @@ function exportPendingRequestsPdf() {
     th, td { border: 1px solid #cbd5e1; padding: 5px 6px; vertical-align: top; word-break: break-word; }
     th { background: #f1f5f9; text-align: left; font-weight: 700; }
     tr { page-break-inside: avoid; break-inside: avoid; }
+    .action-badge { display: inline-block; min-width: 78px; padding: 3px 6px; border-radius: 999px; font-size: 9px; font-weight: 700; text-align: center; }
+    .action-add { background: #dcfce7; color: #166534; }
+    .action-change { background: #dbeafe; color: #1d4ed8; }
+    .action-delete { background: #fee2e2; color: #b91c1c; }
   ${styleTagClose}
 </head>
 <body>
@@ -1891,13 +1913,12 @@ function exportPendingRequestsPdf() {
       <thead>
         <tr>
           <th style="width: 10%;">Data</th>
-          <th style="width: 10%;">Acao</th>
+          <th style="width: 12%;">Acao</th>
           <th style="width: 8%;">Codigo</th>
-          <th style="width: 24%;">Produto</th>
+          <th style="width: 30%;">Produto</th>
           <th style="width: 10%;">Solicitante</th>
-          <th style="width: 10%;">Codigos do kit</th>
-          <th style="width: 16%;">Solicitacao</th>
-          <th style="width: 12%;">Observacao</th>
+          <th style="width: 20%;">Solicitacao</th>
+          <th style="width: 10%;">Observacao</th>
         </tr>
       </thead>
       <tbody>${bodyHtml}</tbody>
