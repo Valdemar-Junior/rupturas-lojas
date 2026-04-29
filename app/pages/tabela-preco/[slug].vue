@@ -123,7 +123,7 @@
         </section>
 
         <section
-          v-if="pendingAddRequests.length > 0"
+          v-if="activePanelTab === 'tabela' && pendingAddRequests.length > 0"
           class="print-hide rounded-2xl border border-cyan-200/80 bg-cyan-50/60 p-4 sm:p-5"
         >
           <div class="flex flex-wrap items-center justify-between gap-2">
