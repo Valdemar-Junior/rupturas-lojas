@@ -132,11 +132,16 @@ export function useTabelaPreco() {
     requests: TabelaPrecoSolicitacao[]
   ) {
     const mapById = new Map<number, TabelaPrecoItem>()
+    const mapByCode = new Map<string, TabelaPrecoItem>()
     const codeSet = new Set<string>()
     rows.forEach((row) => mapById.set(row.id, row))
     rows.forEach((row) => {
       const code = normalizeCodigo(row.codigo)
-      if (code) codeSet.add(code)
+      if (!code) return
+      codeSet.add(code)
+      if (!mapByCode.has(code)) {
+        mapByCode.set(code, row)
+      }
     })
 
     const autoResolved: ResolucaoAutomatica[] = []
@@ -168,9 +173,11 @@ export function useTabelaPreco() {
         return
       }
 
-      const row = request.tabela_preco_id === null
+      const requestCode = normalizeCodigo(request.codigo)
+      const rowById = request.tabela_preco_id === null
         ? undefined
         : mapById.get(request.tabela_preco_id)
+      const row = rowById ?? (requestCode ? mapByCode.get(requestCode) : undefined)
 
       if (request.acao === 'excluir') {
         if (!row) {

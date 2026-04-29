@@ -7,31 +7,16 @@
           Tabela de Preco
         </h1>
         <p class="mt-2 text-sm text-slate-600">
-          Selecione a tabela para consultar os itens e valores.
+          Consulte os itens, valores e solicitacoes da tabela principal.
         </p>
 
-        <div class="mt-6 space-y-2">
-          <NuxtLink
-            v-for="table in priceTables"
-            :key="table.slug"
-            :to="`/tabela-preco/${table.slug}`"
-            :class="[
-              'block w-full text-left rounded-2xl p-3 transition border',
-              activeSlug === table.slug
-                ? 'border-slate-900 bg-slate-900 text-white shadow-lg'
-                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-            ]"
-          >
-            <p class="text-sm font-semibold">{{ table.title }}</p>
-            <p
-              :class="[
-                'text-xs mt-1',
-                activeSlug === table.slug ? 'text-slate-300' : 'text-slate-500'
-              ]"
-            >
-              {{ table.description }}
+        <div class="mt-6">
+          <div class="rounded-2xl border border-slate-900 bg-slate-900 p-3 text-white shadow-lg">
+            <p class="text-sm font-semibold">{{ activeTable.title }}</p>
+            <p class="mt-1 text-xs text-slate-300">
+              {{ activeTable.description }}
             </p>
-          </NuxtLink>
+          </div>
         </div>
 
         <div class="mt-6 rounded-2xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-3">
@@ -60,10 +45,10 @@
           <div class="relative">
             <p class="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Modulo comercial</p>
             <h2 class="mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight">
-              {{ activeTable?.title || 'Tabela de Preco' }}
+              {{ activeTable.title }}
             </h2>
             <p class="mt-2 text-cyan-50/90 text-sm sm:text-base">
-              {{ activeTable?.description }}
+              {{ activeTable.description }}
             </p>
             <div class="mt-4 inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide">
               {{ filteredItems.length }} itens exibidos apos filtros
@@ -828,22 +813,15 @@ type AddProductKitComponent = {
 
 const MC_TAX_RATE = 0.165
 
-const priceTables: PriceTableOption[] = [
-  {
-    slug: 'assu-cartao',
-    dbName: 'TABELA INTERNA ASSU CART\u00C3O',
-    title: 'Tabela Assu Cartao',
-    description: 'Tabela interna de preco para a loja Assu.'
-  },
-  {
-    slug: 'mossoro-filial-01',
-    dbName: 'TABELA INTERNA MOSSORO FILIAL 01',
-    title: 'Tabela Mossoro Filial 01',
-    description: 'Tabela interna de preco para a filial de Mossoro.'
-  }
-]
+const activeTable: PriceTableOption = {
+  slug: 'interna-geral',
+  dbName: 'TABELA INTERNA GERAL',
+  title: 'Tabela Interna Geral',
+  description: 'Tabela principal de preco utilizada pelo comercial.'
+}
 
 const route = useRoute()
+const router = useRouter()
 const search = ref('')
 const activePanelTab = ref<PanelTab>('tabela')
 const currentProfile = ref<UserProfile>('diretor')
@@ -892,10 +870,6 @@ const {
 
 const activeSlug = computed(() => {
   return typeof route.params.slug === 'string' ? route.params.slug : ''
-})
-
-const activeTable = computed(() => {
-  return priceTables.find((table) => table.slug === activeSlug.value) ?? null
 })
 
 const pendingRequestCount = computed(() => solicitacoesPendentes.value.length)
@@ -1036,10 +1010,8 @@ watch(
 watch(
   () => activeSlug.value,
   async () => {
-    const table = activeTable.value
-
-    if (!table) {
-      await navigateTo(`/tabela-preco/${priceTables[0].slug}`, { replace: true })
+    if (activeSlug.value !== activeTable.slug) {
+      await router.replace(`/tabela-preco/${activeTable.slug}`)
       return
     }
 
@@ -1049,7 +1021,7 @@ watch(
     closeAddProductModal()
     cancelErrorRequestId.value = null
     cancelErrorMessage.value = null
-    await fetchByTabela(table.dbName)
+    await fetchByTabela(activeTable.dbName)
   },
   { immediate: true }
 )
@@ -1117,8 +1089,7 @@ onBeforeUnmount(() => {
 })
 
 async function refreshData() {
-  if (!activeTable.value) return
-  await fetchByTabela(activeTable.value.dbName)
+  await fetchByTabela(activeTable.dbName)
 }
 
 function openRequestForm(item: TabelaPrecoItem) {
@@ -1142,11 +1113,6 @@ function cancelRequestForm() {
 async function submitRequest(item: TabelaPrecoItem) {
   requestFormError.value = null
 
-  if (!activeTable.value) {
-    requestFormError.value = 'Tabela ativa nao encontrada.'
-    return
-  }
-
   let novoPreco: number | null = null
   if (requestForm.value.acao === 'alterar_preco') {
     novoPreco = parseMoneyInput(requestForm.value.novoPreco)
@@ -1159,14 +1125,14 @@ async function submitRequest(item: TabelaPrecoItem) {
   try {
     await createSolicitacao({
       item,
-      tabelaNome: activeTable.value.dbName,
+      tabelaNome: activeTable.dbName,
       acao: requestForm.value.acao,
       novoPreco,
       solicitante: requestForm.value.solicitante,
       observacao: requestForm.value.observacao
     })
 
-    await fetchByTabela(activeTable.value.dbName)
+    await fetchByTabela(activeTable.dbName)
     cancelRequestForm()
   } catch (err: any) {
     requestFormError.value = err?.message || 'Falha ao criar solicitacao.'
@@ -1174,14 +1140,14 @@ async function submitRequest(item: TabelaPrecoItem) {
 }
 
 async function cancelPendingRequest(request: TabelaPrecoSolicitacao | undefined) {
-  if (!request || !activeTable.value) return
+  if (!request) return
 
   cancelErrorRequestId.value = null
   cancelErrorMessage.value = null
 
   try {
     await cancelSolicitacao(request.id)
-    await fetchByTabela(activeTable.value.dbName)
+    await fetchByTabela(activeTable.dbName)
   } catch (err: any) {
     cancelErrorRequestId.value = request.id
     cancelErrorMessage.value = err?.message || 'Falha ao cancelar solicitacao.'
@@ -1483,11 +1449,6 @@ function clearSelectedProductIfNeeded() {
 async function submitAddProductRequest() {
   addProductError.value = null
 
-  if (!activeTable.value) {
-    addProductError.value = 'Tabela ativa nao encontrada.'
-    return
-  }
-
   if (!selectedAddProduct.value) {
     addProductError.value = 'Selecione um produto na lista para solicitar a adicao.'
     return
@@ -1502,7 +1463,7 @@ async function submitAddProductRequest() {
   try {
     await createSolicitacao({
       acao: 'adicionar_produto',
-      tabelaNome: activeTable.value.dbName,
+      tabelaNome: activeTable.dbName,
       codigo: selectedAddProduct.value.codigo,
       codigosRelacionados: addProductRelatedCodes.value,
       produto: selectedAddProduct.value.produto,
@@ -1512,7 +1473,7 @@ async function submitAddProductRequest() {
       observacao: addProductObservation.value
     })
 
-    await fetchByTabela(activeTable.value.dbName)
+    await fetchByTabela(activeTable.dbName)
     closeAddProductModal()
   } catch (err: any) {
     addProductError.value = err?.message || 'Falha ao criar solicitacao de adicao.'
@@ -1688,7 +1649,7 @@ function exportProductsTablePdf() {
     minute: '2-digit'
   }).format(new Date())
 
-  const reportTitle = `Tabela de produtos - ${activeTable.value?.title || 'Tabela de Preco'}`
+  const reportTitle = `Tabela de produtos - ${activeTable.title}`
   const reportSubtitle = `${rows.length} item(ns) exibidos | Estoque por local: LOJA ASSU / DEPOSITO / LOJA MOSSORO | Gerado em ${generatedAt}`
   const logoUrl = new URL('/LOGONEW .png', window.location.origin).toString()
 
@@ -1865,7 +1826,7 @@ function exportPendingRequestsPdf() {
     minute: '2-digit'
   }).format(new Date())
 
-  const reportTitle = `Solicitacoes pendentes - ${activeTable.value?.title || 'Tabela de Preco'}`
+  const reportTitle = `Solicitacoes pendentes - ${activeTable.title}`
   const reportSubtitle = `${requests.length} solicitacoes pendentes | Gerado em ${generatedAt}`
   const logoUrl = new URL('/LOGONEW .png', window.location.origin).toString()
 
