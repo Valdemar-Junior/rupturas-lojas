@@ -6,56 +6,49 @@
       <div class="absolute -right-14 -top-10 h-44 w-44 rounded-full bg-cyan-300/20 blur-3xl"></div>
       <div class="absolute -left-10 -bottom-14 h-44 w-44 rounded-full bg-orange-200/20 blur-3xl"></div>
 
-      <div class="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div class="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div class="max-w-3xl">
           <p class="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Financeiro Diario</p>
           <h1 class="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">Relatorio automatico de receita e pagamentos</h1>
           <p class="mt-2 text-sm text-cyan-50 sm:text-base">
-            Consolidado diario com creditos do extrato, titulos pagos e carteira pendente. Disparo automatico previsto para 17:00 (America/Fortaleza) via cron da Vercel.
+            Primeiro escolha a conta caixa/banco do ERP. Depois suba o extrato dessa mesma conta para consolidar creditos, pagos e pendentes.
           </p>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2">
-          <label class="rounded-xl border border-white/25 bg-white/10 px-3 py-2 text-xs">
-            <span class="mr-2 font-semibold">Data</span>
+        <div class="grid gap-3 md:grid-cols-2">
+          <label class="w-full rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm">
+            <span class="block text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100">Data do movimento</span>
             <input
               v-model="selectedDate"
               type="date"
-              class="rounded-md border border-white/30 bg-transparent px-2 py-1 text-xs text-white outline-none"
+              class="mt-2 w-full rounded-xl border border-white/25 bg-slate-950/20 px-3 py-2 text-sm text-white outline-none"
             >
           </label>
-          <button
-            type="button"
-            class="rounded-xl border border-white/25 bg-white/10 px-3 py-2 text-xs font-semibold transition hover:bg-white/20"
-            :disabled="pending"
-            @click="loadReport"
-          >
-            {{ pending ? 'Atualizando...' : 'Atualizar dados' }}
-          </button>
-          <button
-            type="button"
-            class="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 transition hover:bg-slate-100"
-            @click="openPreview"
-          >
-            Preview HTML
-          </button>
-          <button
-            type="button"
-            class="rounded-xl bg-cyan-300 px-3 py-2 text-xs font-semibold text-slate-900 transition hover:bg-cyan-200"
-            @click="openPdf"
-          >
-            Gerar PDF manual
-          </button>
-          <button
-            type="button"
-            class="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-slate-900 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-            :disabled="emailManualSendPending || pending || emailConfigPending"
-            @click="sendManualReportEmail"
-          >
-            {{ emailManualSendPending ? 'Enviando e-mail...' : 'Enviar e-mail agora' }}
-          </button>
+
+          <label class="w-full rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm">
+            <span class="block text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100">Conta caixa/banco</span>
+            <select
+              v-model="selectedConta"
+              class="finance-account-select mt-2 w-full rounded-xl border border-white/35 bg-slate-950/70 px-3 py-2 text-sm font-medium text-white outline-none transition focus:border-cyan-300 focus:ring-2 focus:ring-cyan-300/30"
+            >
+              <option value="">Selecione a conta</option>
+              <option v-for="option in accountOptions" :key="option" :value="option">{{ option }}</option>
+            </select>
+          </label>
         </div>
       </div>
+    </section>
+
+    <section class="grid gap-3 lg:grid-cols-4">
+      <article
+        v-for="step in flowSteps"
+        :key="step.title"
+        class="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.6)]"
+      >
+        <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-cyan-700">{{ step.index }}</p>
+        <h2 class="mt-2 text-sm font-bold text-slate-900">{{ step.title }}</h2>
+        <p class="mt-1 text-sm text-slate-600">{{ step.description }}</p>
+      </article>
     </section>
 
     <section v-if="emailMessage" class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
@@ -66,13 +59,13 @@
       {{ emailError }}
     </section>
 
-    <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.6)]">
-      <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p class="text-xs uppercase tracking-[0.14em] text-slate-500">Extrato bancario</p>
-          <h2 class="mt-1 text-base font-bold text-slate-900">Upload do PDF do dia</h2>
+    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.6)]">
+      <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div class="max-w-2xl">
+          <p class="text-xs uppercase tracking-[0.14em] text-slate-500">Operacao do dia</p>
+          <h2 class="mt-1 text-lg font-bold text-slate-900">Subir extrato da conta selecionada</h2>
           <p class="mt-1 text-sm text-slate-600">
-            Selecione o extrato em PDF para extrair os creditos e alimentar o relatorio automaticamente.
+            A conta escolhida acima define quais titulos pagos e pendentes do ERP entram no consolidado. O upload abaixo apenas envia o extrato dessa conta.
           </p>
         </div>
 
@@ -90,212 +83,64 @@
             class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
             @click="openFilePicker"
           >
-            Selecionar PDF
+            Selecionar extrato PDF
           </button>
 
           <button
             type="button"
             class="rounded-xl bg-cyan-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
-            :disabled="uploadPending || !selectedFile"
+            :disabled="uploadPending || !selectedFile || !selectedConta"
             @click="uploadExtrato"
           >
-            {{ uploadPending ? 'Enviando...' : 'Enviar extrato' }}
+            {{ uploadPending ? 'Processando...' : 'Ler e consolidar extrato' }}
           </button>
         </div>
       </div>
 
-      <div class="mt-4 grid gap-3 md:grid-cols-3">
-        <label class="block">
-          <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Data de referencia</span>
-          <input
-            v-model="selectedDate"
-            type="date"
-            class="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-cyan-500 focus:bg-white"
-          >
-        </label>
+      <div class="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
+        <div class="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
+          <p class="font-semibold">Contexto atual</p>
+          <p class="mt-1">Data: {{ formatDate(selectedDate) }}</p>
+          <p class="mt-1">Conta ERP: {{ selectedConta || 'nao selecionada' }}</p>
+        </div>
 
-        <label class="block">
-          <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Banco/conta</span>
-          <input
-            v-model="uploadBank"
-            type="text"
-            class="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-cyan-500 focus:bg-white"
-            placeholder="Sicredi"
-          >
-        </label>
+        <div class="grid gap-3">
+          <label class="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <input v-model="replaceExisting" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500">
+            <span class="text-sm text-slate-700">Substituir creditos ja importados dessa conta nessa data</span>
+          </label>
 
-        <label class="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-          <input v-model="replaceExisting" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500">
-          <span class="text-sm text-slate-700">Substituir lancamentos do dia</span>
-        </label>
+          <label class="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <input v-model="groupPaidBySupplier" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500">
+            <span class="text-sm text-slate-700">Agrupar titulos pagos por fornecedor</span>
+          </label>
+        </div>
+
+        <NuxtLink
+          to="/financeiro/configuracoes"
+          class="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+        >
+          Configurar e-mail
+        </NuxtLink>
       </div>
 
-      <p class="mt-3 text-sm text-slate-600">
-        Arquivo selecionado:
-        <span class="font-semibold text-slate-900">{{ selectedFile ? selectedFile.name : 'nenhum arquivo' }}</span>
-      </p>
+      <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <p class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Arquivo selecionado</p>
+        <p class="mt-1 text-sm font-semibold text-slate-900">{{ selectedFile ? selectedFile.name : 'Nenhum arquivo escolhido' }}</p>
+      </div>
 
-      <p v-if="persistedExtratoInfo" class="mt-2 rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-800">
-        PDF salvo no banco para {{ formatDate(persistedExtratoInfo.dataReferencia) }}:
+      <p v-if="persistedExtratoInfo" class="mt-3 rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-800">
+        PDF salvo para {{ formatDate(persistedExtratoInfo.dataReferencia) }} em <strong>{{ persistedExtratoInfo.banco }}</strong>:
         <strong>{{ persistedExtratoInfo.fileName }}</strong> ({{ formatBytes(persistedExtratoInfo.sizeBytes) }})
       </p>
 
-      <p v-if="uploadMessage" class="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+      <p v-if="uploadMessage" class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
         {{ uploadMessage }}
       </p>
 
-      <p v-if="uploadError" class="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+      <p v-if="uploadError" class="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
         {{ uploadError }}
       </p>
-    </section>
-
-    <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.6)]">
-      <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p class="text-xs uppercase tracking-[0.14em] text-slate-500">Configuracao de e-mail</p>
-          <h2 class="mt-1 text-base font-bold text-slate-900">SMTP para envio do relatorio</h2>
-          <p class="mt-1 text-sm text-slate-600">
-            Configure remetente e destinatarios e use o envio de teste para validar antes do disparo automatico.
-          </p>
-          <p class="mt-1 text-xs font-semibold text-slate-500">
-            Origem atual: {{ emailSourceLabel }}
-          </p>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-            :disabled="emailConfigPending"
-            @click="loadEmailConfig"
-          >
-            {{ emailConfigPending ? 'Carregando...' : 'Recarregar config' }}
-          </button>
-
-          <button
-            type="button"
-            class="rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-            :disabled="emailSavePending || emailTestPending || emailManualSendPending"
-            @click="saveEmailSettings"
-          >
-            {{ emailSavePending ? 'Salvando...' : 'Salvar configuracao' }}
-          </button>
-
-          <button
-            type="button"
-            class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
-            :disabled="emailSavePending || emailTestPending || emailManualSendPending"
-            @click="sendEmailTest"
-          >
-            {{ emailTestPending ? 'Enviando teste...' : 'Enviar e-mail de teste' }}
-          </button>
-
-        </div>
-      </div>
-
-      <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <label class="block">
-          <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">SMTP host</span>
-          <input
-            v-model="emailConfig.smtpHost"
-            type="text"
-            class="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-cyan-500 focus:bg-white"
-            placeholder="smtp.gmail.com"
-          >
-        </label>
-
-        <label class="block">
-          <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">SMTP porta</span>
-          <input
-            v-model.number="emailConfig.smtpPort"
-            type="number"
-            min="1"
-            class="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-cyan-500 focus:bg-white"
-          >
-        </label>
-
-        <label class="block">
-          <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">SMTP usuario</span>
-          <input
-            v-model="emailConfig.smtpUser"
-            type="text"
-            class="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-cyan-500 focus:bg-white"
-            placeholder="usuario@dominio.com"
-          >
-        </label>
-
-        <label class="block">
-          <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">SMTP senha</span>
-          <input
-            v-model="emailConfig.smtpPass"
-            type="password"
-            class="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-cyan-500 focus:bg-white"
-            placeholder="Digite somente para alterar"
-          >
-        </label>
-
-        <label class="block md:col-span-2">
-          <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Remetente (from)</span>
-          <input
-            v-model="emailConfig.emailFrom"
-            type="text"
-            class="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-cyan-500 focus:bg-white"
-            placeholder="Financeiro <financeiro@empresa.com>"
-          >
-        </label>
-
-        <label class="block md:col-span-2">
-          <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Destinatarios (to)</span>
-          <input
-            v-model="emailConfig.emailTo"
-            type="text"
-            class="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-cyan-500 focus:bg-white"
-            placeholder="financeiro@empresa.com, diretoria@empresa.com"
-          >
-        </label>
-
-        <label class="block md:col-span-2">
-          <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">CC (opcional)</span>
-          <input
-            v-model="emailConfig.emailCc"
-            type="text"
-            class="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-cyan-500 focus:bg-white"
-            placeholder="controladoria@empresa.com"
-          >
-        </label>
-
-        <label class="block md:col-span-2">
-          <span class="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Prefixo do assunto (opcional)</span>
-          <input
-            v-model="emailConfig.subjectPrefix"
-            type="text"
-            class="mt-1 w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-cyan-500 focus:bg-white"
-            placeholder="[Lojao]"
-          >
-        </label>
-      </div>
-
-      <label class="mt-3 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-        <input
-          v-model="emailConfig.smtpSecure"
-          type="checkbox"
-          class="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
-        >
-        <span class="text-sm text-slate-700">Conexao segura (SSL/TLS)</span>
-      </label>
-
-      <p v-if="smtpConfigHint" class="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-        {{ smtpConfigHint }}
-      </p>
-
-      <p class="mt-3 text-xs text-slate-500">
-        Se a senha ja estiver salva, deixe o campo de senha em branco para manter a atual.
-      </p>
-
-      <p class="mt-1 text-xs font-semibold text-slate-500">
-        Senha SMTP cadastrada: {{ emailHasPassword ? 'sim' : 'nao' }}
-      </p>
-
     </section>
 
     <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -308,7 +153,7 @@
         <p class="mt-1 text-xl font-bold text-rose-700">{{ formatCurrency(report?.totalTitulosPagosNoDia || 0) }}</p>
       </article>
       <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.6)]">
-        <p class="text-[11px] uppercase tracking-[0.14em] text-slate-500">Pendentes ate hoje</p>
+        <p class="text-[11px] uppercase tracking-[0.14em] text-slate-500">Pendentes ate a data</p>
         <p class="mt-1 text-xl font-bold text-amber-700">{{ formatCurrency(report?.totalTitulosPendentesAteHoje || 0) }}</p>
       </article>
       <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.6)]">
@@ -326,6 +171,43 @@
       <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-800">
         <li v-for="warning in report.avisos" :key="warning">{{ warning }}</li>
       </ul>
+    </section>
+
+    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.6)]">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p class="text-xs uppercase tracking-[0.14em] text-slate-500">Saida do relatorio</p>
+          <h2 class="mt-1 text-base font-bold text-slate-900">Visualizar, gerar PDF ou enviar</h2>
+          <p class="mt-1 text-sm text-slate-600">
+            O preview, o PDF e o envio consideram a data, a conta e o modo de exibicao selecionados no topo da tela.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+            @click="openPreview"
+          >
+            Preview HTML
+          </button>
+          <button
+            type="button"
+            class="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 transition hover:bg-slate-100"
+            @click="openPdf"
+          >
+            Gerar PDF
+          </button>
+          <button
+            type="button"
+            class="rounded-xl bg-emerald-400 px-3 py-2 text-xs font-semibold text-slate-900 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="emailManualSendPending || pending || !selectedConta"
+            @click="sendManualReportEmail"
+          >
+            {{ emailManualSendPending ? 'Enviando e-mail...' : 'Enviar e-mail agora' }}
+          </button>
+        </div>
+      </div>
     </section>
 
     <section class="rounded-2xl border border-slate-200 bg-white shadow-[0_18px_42px_-34px_rgba(15,23,42,0.6)]">
@@ -370,8 +252,10 @@
           <thead class="sticky top-0 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
             <tr>
               <th class="px-3 py-2">Titulo</th>
+              <th class="px-3 py-2">Parcela</th>
               <th class="px-3 py-2">Fornecedor</th>
               <th class="px-3 py-2">Historico</th>
+              <th class="px-3 py-2">Login baixa</th>
               <th class="px-3 py-2">Complemento</th>
               <th class="px-3 py-2">Conta caixa/banco</th>
               <th class="px-3 py-2">Forma pgto</th>
@@ -380,10 +264,12 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-200">
-            <tr v-for="item in report?.titulosPagosNoDia || []" :key="`${item.numeroTitulo}-${item.valorPago}-${item.dataBaixa}`">
+            <tr v-for="item in report?.titulosPagosNoDia || []" :key="`${item.numeroTitulo}-${item.parcela}-${item.valorPago}-${item.dataBaixa}`">
               <td class="px-3 py-2">{{ item.numeroTitulo }}</td>
+              <td class="px-3 py-2">{{ item.parcela }}</td>
               <td class="px-3 py-2">{{ item.fornecedor }}</td>
               <td class="px-3 py-2">{{ item.historico }}</td>
+              <td class="px-3 py-2">{{ item.usuarioLogin }}</td>
               <td class="px-3 py-2">{{ item.complemento }}</td>
               <td class="px-3 py-2">{{ item.contaCaixaBanco }}</td>
               <td class="px-3 py-2">{{ item.formaPagamento }}</td>
@@ -391,7 +277,7 @@
               <td class="px-3 py-2 text-right font-semibold text-rose-700">{{ formatCurrency(item.valorPago) }}</td>
             </tr>
             <tr v-if="!report || report.titulosPagosNoDia.length === 0">
-              <td colspan="8" class="px-3 py-8 text-center text-sm text-slate-500">Nenhum titulo pago encontrado.</td>
+              <td colspan="10" class="px-3 py-8 text-center text-sm text-slate-500">Nenhum titulo pago encontrado.</td>
             </tr>
           </tbody>
         </table>
@@ -433,7 +319,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import FinanceiroNavTabs from '~/components/financeiro/FinanceiroNavTabs.vue'
 
 type Credito = {
@@ -446,8 +332,10 @@ type Credito = {
 
 type TituloPago = {
   numeroTitulo: string
+  parcela: string
   fornecedor: string
   historico: string
+  usuarioLogin: string
   complemento: string
   formaPagamento: string
   contaCaixaBanco: string
@@ -465,6 +353,8 @@ type TituloPendente = {
 
 type ReportPayload = {
   dataReferencia: string
+  contaSelecionada: string | null
+  availableContas: string[]
   geradoEmIso: string
   creditosExtrato: Credito[]
   titulosPagosNoDia: TituloPago[]
@@ -476,78 +366,52 @@ type ReportPayload = {
   avisos: string[]
 }
 
-type EmailConfigSource = 'database' | 'env' | 'none'
-
-type EmailConfigPayload = {
-  smtpHost: string
-  smtpPort: number
-  smtpSecure: boolean
-  smtpUser: string
-  smtpPass: string
-  emailFrom: string
-  emailTo: string
-  emailCc: string
-  subjectPrefix: string
-}
-
 const selectedDate = ref(getTodayInputDate())
+const selectedConta = ref('')
+const groupPaidBySupplier = ref(false)
 const pending = ref(false)
 const errorMessage = ref('')
 const report = ref<ReportPayload | null>(null)
 const uploadPending = ref(false)
 const selectedFile = ref<File | null>(null)
-const uploadBank = ref('Conta principal')
 const replaceExisting = ref(true)
 const uploadMessage = ref('')
 const uploadError = ref('')
-const persistedExtratoInfo = ref<{ fileName: string; sizeBytes: number; dataReferencia: string } | null>(null)
+const persistedExtratoInfo = ref<{ fileName: string; sizeBytes: number; dataReferencia: string; banco: string } | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
-const emailConfig = reactive<EmailConfigPayload>({
-  smtpHost: '',
-  smtpPort: 587,
-  smtpSecure: false,
-  smtpUser: '',
-  smtpPass: '',
-  emailFrom: '',
-  emailTo: '',
-  emailCc: '',
-  subjectPrefix: ''
-})
-const emailConfigSource = ref<EmailConfigSource>('none')
-const emailHasPassword = ref(false)
-const emailConfigPending = ref(false)
-const emailSavePending = ref(false)
-const emailTestPending = ref(false)
 const emailManualSendPending = ref(false)
 const emailMessage = ref('')
 const emailError = ref('')
+
+const flowSteps = [
+  {
+    index: '01',
+    title: 'Escolher a data',
+    description: 'Defina a data do movimento financeiro que sera consolidada.'
+  },
+  {
+    index: '02',
+    title: 'Selecionar a conta',
+    description: 'Escolha a conta caixa/banco do ERP para filtrar pagos e pendentes.'
+  },
+  {
+    index: '03',
+    title: 'Subir o extrato',
+    description: 'Envie o PDF dessa mesma conta para ler apenas os creditos correspondentes.'
+  },
+  {
+    index: '04',
+    title: 'Conferir e enviar',
+    description: 'Revise creditos, pagos e pendentes da conta selecionada antes de enviar.'
+  }
+]
 
 const saldoClass = computed(() => {
   const value = report.value?.saldoDoDia || 0
   return value >= 0 ? 'text-emerald-700' : 'text-rose-700'
 })
 
-const emailSourceLabel = computed(() => {
-  if (emailConfigSource.value === 'database') return 'Banco de dados (customizada)'
-  if (emailConfigSource.value === 'env') return 'Variaveis de ambiente'
-  return 'Nao configurada'
-})
-
-const smtpConfigHint = computed(() => {
-  const host = (emailConfig.smtpHost || '').trim().toLowerCase()
-  const port = Number(emailConfig.smtpPort)
-  if (!host.includes('gmail')) return ''
-
-  if (emailConfig.smtpSecure && port === 587) {
-    return 'Gmail: com SSL/TLS marcado use porta 465. Para porta 587, desmarque SSL/TLS.'
-  }
-
-  if (!emailConfig.smtpSecure && port === 465) {
-    return 'Gmail: com porta 465 marque SSL/TLS.'
-  }
-
-  return 'Gmail recomendado: SMTP usuario completo, senha de app (16 caracteres), from como e-mail valido.'
-})
+const accountOptions = computed(() => report.value?.availableContas || [])
 
 function getTodayInputDate(): string {
   const now = new Date()
@@ -589,6 +453,39 @@ function formatBytes(value: number): string {
   return `${(value / (1024 * 1024)).toFixed(2)} MB`
 }
 
+async function loadPersistedExtrato() {
+  try {
+    const fileResponse = await $fetch<{
+      success: boolean
+      dataReferencia: string
+      exists: boolean
+      fileName: string | null
+      sizeBytes: number
+      latest?: {
+        banco?: string | null
+      }
+    }>('/api/financeiro/relatorio/extrato-arquivo', {
+      query: {
+        data: selectedDate.value,
+        conta: selectedConta.value || undefined
+      }
+    })
+
+    if (fileResponse.exists && fileResponse.fileName && selectedConta.value) {
+      persistedExtratoInfo.value = {
+        fileName: fileResponse.fileName,
+        sizeBytes: Number(fileResponse.sizeBytes || 0),
+        dataReferencia: fileResponse.dataReferencia,
+        banco: selectedConta.value
+      }
+    } else {
+      persistedExtratoInfo.value = null
+    }
+  } catch {
+    persistedExtratoInfo.value = null
+  }
+}
+
 async function loadReport() {
   if (!isValidIsoDate(selectedDate.value)) {
     errorMessage.value = 'Data invalida. Use o formato YYYY-MM-DD no seletor de data.'
@@ -601,7 +498,9 @@ async function loadReport() {
   try {
     const response = await $fetch<{ success: boolean; data: ReportPayload }>('/api/financeiro/relatorio/dados', {
       query: {
-        data: selectedDate.value
+        data: selectedDate.value,
+        conta: selectedConta.value || undefined,
+        agrupar_fornecedor: groupPaidBySupplier.value ? '1' : '0'
       }
     })
 
@@ -614,39 +513,24 @@ async function loadReport() {
     pending.value = false
   }
 
-  try {
-    const fileResponse = await $fetch<{
-      success: boolean
-      dataReferencia: string
-      exists: boolean
-      fileName: string | null
-      sizeBytes: number
-    }>('/api/financeiro/relatorio/extrato-arquivo', {
-      query: {
-        data: selectedDate.value
-      }
-    })
+  await loadPersistedExtrato()
+}
 
-    if (fileResponse.exists && fileResponse.fileName) {
-      persistedExtratoInfo.value = {
-        fileName: fileResponse.fileName,
-        sizeBytes: Number(fileResponse.sizeBytes || 0),
-        dataReferencia: fileResponse.dataReferencia
-      }
-    } else {
-      persistedExtratoInfo.value = null
-    }
-  } catch {
-    persistedExtratoInfo.value = null
+function buildReportQuery() {
+  const query = new URLSearchParams({ data: selectedDate.value })
+  if (selectedConta.value) {
+    query.set('conta', selectedConta.value)
   }
+  query.set('agrupar_fornecedor', groupPaidBySupplier.value ? '1' : '0')
+  return query.toString()
 }
 
 function openPreview() {
-  window.open(`/api/financeiro/relatorio/preview?data=${selectedDate.value}`, '_blank')
+  window.open(`/api/financeiro/relatorio/preview?${buildReportQuery()}`, '_blank')
 }
 
 function openPdf() {
-  window.open(`/api/financeiro/relatorio/pdf?data=${selectedDate.value}`, '_blank')
+  window.open(`/api/financeiro/relatorio/pdf?${buildReportQuery()}`, '_blank')
 }
 
 function openFilePicker() {
@@ -659,7 +543,6 @@ function onFileChange(event: Event) {
   selectedFile.value = file || null
   uploadMessage.value = ''
   uploadError.value = ''
-  persistedExtratoInfo.value = null
 }
 
 function clearEmailFeedback() {
@@ -667,122 +550,14 @@ function clearEmailFeedback() {
   emailError.value = ''
 }
 
-function buildEmailConfigPayload() {
-  return {
-    smtpHost: emailConfig.smtpHost,
-    smtpPort: emailConfig.smtpPort,
-    smtpSecure: emailConfig.smtpSecure,
-    smtpUser: emailConfig.smtpUser,
-    smtpPass: emailConfig.smtpPass,
-    emailFrom: emailConfig.emailFrom,
-    emailTo: emailConfig.emailTo,
-    emailCc: emailConfig.emailCc,
-    subjectPrefix: emailConfig.subjectPrefix
-  }
-}
-
-async function loadEmailConfig() {
-  emailConfigPending.value = true
-  clearEmailFeedback()
-
-  try {
-    const response = await $fetch<{
-      success: boolean
-      configured: boolean
-      hasPassword: boolean
-      source: EmailConfigSource
-      data: EmailConfigPayload
-    }>('/api/financeiro/relatorio/email-config')
-
-    emailConfig.smtpHost = response.data.smtpHost || ''
-    emailConfig.smtpPort = Number(response.data.smtpPort) || 587
-    emailConfig.smtpSecure = !!response.data.smtpSecure
-    emailConfig.smtpUser = response.data.smtpUser || ''
-    emailConfig.smtpPass = ''
-    emailConfig.emailFrom = response.data.emailFrom || ''
-    emailConfig.emailTo = response.data.emailTo || ''
-    emailConfig.emailCc = response.data.emailCc || ''
-    emailConfig.subjectPrefix = response.data.subjectPrefix || ''
-
-    emailConfigSource.value = response.source
-    emailHasPassword.value = response.hasPassword
-  } catch (error: any) {
-    console.error(error)
-    emailError.value = error?.data?.statusMessage || error?.message || 'Falha ao carregar configuracao de e-mail.'
-  } finally {
-    emailConfigPending.value = false
-  }
-}
-
-async function saveEmailSettings() {
-  emailSavePending.value = true
-  clearEmailFeedback()
-
-  try {
-    const response = await $fetch<{
-      success: boolean
-      message: string
-      hasPassword: boolean
-      source: EmailConfigSource
-      data: EmailConfigPayload
-    }>('/api/financeiro/relatorio/email-config', {
-      method: 'POST',
-      body: buildEmailConfigPayload()
-    })
-
-    emailConfig.smtpHost = response.data.smtpHost || ''
-    emailConfig.smtpPort = Number(response.data.smtpPort) || 587
-    emailConfig.smtpSecure = !!response.data.smtpSecure
-    emailConfig.smtpUser = response.data.smtpUser || ''
-    emailConfig.smtpPass = ''
-    emailConfig.emailFrom = response.data.emailFrom || ''
-    emailConfig.emailTo = response.data.emailTo || ''
-    emailConfig.emailCc = response.data.emailCc || ''
-    emailConfig.subjectPrefix = response.data.subjectPrefix || ''
-
-    emailConfigSource.value = response.source
-    emailHasPassword.value = response.hasPassword
-    emailMessage.value = response.message || 'Configuracao de e-mail salva com sucesso.'
-  } catch (error: any) {
-    console.error(error)
-    emailError.value = error?.data?.statusMessage || error?.message || 'Falha ao salvar configuracao de e-mail.'
-  } finally {
-    emailSavePending.value = false
-  }
-}
-
-async function sendEmailTest() {
-  emailTestPending.value = true
-  clearEmailFeedback()
-
-  try {
-    const response = await $fetch<{
-      success: boolean
-      message: string
-      destinatarios: string[]
-      dataReferencia: string
-    }>('/api/financeiro/relatorio/email-test', {
-      method: 'POST',
-      body: {
-        ...buildEmailConfigPayload(),
-        data: selectedDate.value
-      }
-    })
-
-    emailConfig.smtpPass = ''
-    emailHasPassword.value = true
-    emailMessage.value = `${response.message} Destinatarios: ${response.destinatarios.join(', ')}`
-  } catch (error: any) {
-    console.error(error)
-    emailError.value = error?.data?.statusMessage || error?.message || 'Falha ao enviar e-mail de teste.'
-  } finally {
-    emailTestPending.value = false
-  }
-}
-
 async function sendManualReportEmail() {
   if (!isValidIsoDate(selectedDate.value)) {
     emailError.value = 'Data invalida para envio. Selecione uma data valida.'
+    return
+  }
+
+  if (!selectedConta.value) {
+    emailError.value = 'Selecione a conta caixa/banco antes de enviar o relatorio.'
     return
   }
 
@@ -803,7 +578,9 @@ async function sendManualReportEmail() {
       method: 'POST',
       body: {
         data: selectedDate.value,
-        exigir_credito: true
+        conta: selectedConta.value,
+        exigir_credito: true,
+        agrupar_fornecedor: groupPaidBySupplier.value
       }
     })
 
@@ -815,7 +592,7 @@ async function sendManualReportEmail() {
     const extratoSize = Number(response.anexoExtrato?.sizeBytes || 0)
     const extratoSizeKb = extratoSize > 0 ? `${(extratoSize / 1024).toFixed(1)} KB` : '--'
 
-    emailMessage.value = `Relatorio enviado com sucesso (${response.dataReferencia}). Destinatarios: ${destinatarios}. Extrato anexado: ${extratoNome} (${extratoSizeKb}).`
+    emailMessage.value = `Relatorio enviado com sucesso (${response.dataReferencia}) para a conta ${selectedConta.value}. Destinatarios: ${destinatarios}. Extrato anexado: ${extratoNome} (${extratoSizeKb}).`
     await loadReport()
   } catch (error: any) {
     console.error(error)
@@ -828,6 +605,11 @@ async function sendManualReportEmail() {
 async function uploadExtrato() {
   if (!isValidIsoDate(selectedDate.value)) {
     uploadError.value = 'Data de referencia invalida. Selecione uma data valida antes do upload.'
+    return
+  }
+
+  if (!selectedConta.value) {
+    uploadError.value = 'Selecione a conta caixa/banco antes de enviar o extrato.'
     return
   }
 
@@ -844,12 +626,13 @@ async function uploadExtrato() {
     const formData = new FormData()
     formData.append('file', selectedFile.value)
     formData.append('data_referencia', selectedDate.value)
-    formData.append('banco', uploadBank.value || 'Conta principal')
+    formData.append('banco', selectedConta.value)
     formData.append('substituir', String(replaceExisting.value))
 
     const response = await $fetch<{
       success: boolean
       dataReferencia: string
+      banco: string
       registrosInseridos: number
       arquivoExtrato?: {
         fileName: string
@@ -863,11 +646,12 @@ async function uploadExtrato() {
     const extratoNome = response.arquivoExtrato?.fileName || selectedFile.value?.name || 'extrato.pdf'
     const extratoSize = Number(response.arquivoExtrato?.sizeBytes || selectedFile.value?.size || 0)
 
-    uploadMessage.value = `Extrato enviado com sucesso. ${response.registrosInseridos} creditos inseridos para ${response.dataReferencia}. PDF salvo: ${extratoNome} (${formatBytes(extratoSize)}).`
+    uploadMessage.value = `Extrato enviado com sucesso para ${response.banco}. ${response.registrosInseridos} creditos inseridos em ${response.dataReferencia}. PDF salvo: ${extratoNome} (${formatBytes(extratoSize)}).`
     persistedExtratoInfo.value = {
       fileName: extratoNome,
       sizeBytes: extratoSize,
-      dataReferencia: response.dataReferencia
+      dataReferencia: response.dataReferencia,
+      banco: response.banco
     }
     selectedDate.value = response.dataReferencia
 
@@ -885,8 +669,23 @@ async function uploadExtrato() {
   }
 }
 
+watch([selectedDate, selectedConta, groupPaidBySupplier], ([dateValue, contaValue, agruparValue], [previousDate, previousConta, previousAgrupar]) => {
+  if ((dateValue === previousDate && contaValue === previousConta && agruparValue === previousAgrupar) || !isValidIsoDate(dateValue)) return
+  uploadMessage.value = ''
+  uploadError.value = ''
+  emailMessage.value = ''
+  emailError.value = ''
+  void loadReport()
+})
+
 onMounted(() => {
   void loadReport()
-  void loadEmailConfig()
 })
 </script>
+
+<style scoped>
+.finance-account-select option {
+  background: #0f172a;
+  color: #f8fafc;
+}
+</style>

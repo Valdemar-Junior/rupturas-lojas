@@ -12,8 +12,10 @@ export interface ExtratoCreditoDiario {
 export interface TituloFinanceiroResumo {
   id: number
   numero_titulo: string | null
+  sufixo: string | number | null
   fornecedor: string | null
   historico: string | null
+  origem_lancamento: string | null
   complemento: string | null
   forma_pagamento: string | null
   conta_caixa: string | null
@@ -25,6 +27,7 @@ export interface TituloFinanceiroResumo {
   valor_pago: number | string | null
   valor_baixa: number | string | null
   valor_pendente: number | string | null
+  usuario_login: string | null
 }
 
 export interface CreditoExtratoView {
@@ -37,8 +40,10 @@ export interface CreditoExtratoView {
 
 export interface TituloPagoView {
   numeroTitulo: string
+  parcela: string
   fornecedor: string
   historico: string
+  usuarioLogin: string
   complemento: string
   formaPagamento: string
   contaCaixaBanco: string
@@ -56,6 +61,8 @@ export interface TituloPendenteView {
 
 export interface DailyFinanceReportData {
   dataReferencia: string
+  contaSelecionada: string | null
+  availableContas: string[]
   geradoEmIso: string
   creditosExtrato: CreditoExtratoView[]
   titulosPagosNoDia: TituloPagoView[]

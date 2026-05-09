@@ -9,12 +9,16 @@ import type { DailyFinanceReportRunResult } from './report-types'
 
 export interface RunDailyFinanceReportOptions {
   dataReferencia?: string
+  contaCaixaBanco?: string
   exigirCreditoExtrato?: boolean
+  agruparPagosPorFornecedor?: boolean
 }
 
 export async function runDailyFinanceReport(options: RunDailyFinanceReportOptions = {}): Promise<DailyFinanceReportRunResult> {
   const data = await buildDailyFinanceReportData({
-    dataReferencia: options.dataReferencia
+    dataReferencia: options.dataReferencia,
+    contaCaixaBanco: options.contaCaixaBanco,
+    agruparPagosPorFornecedor: options.agruparPagosPorFornecedor
   })
 
   const exigirCreditoExtrato = options.exigirCreditoExtrato ?? true
@@ -29,7 +33,7 @@ export async function runDailyFinanceReport(options: RunDailyFinanceReportOption
   const html = renderDailyFinanceReportHtml(data)
   const pdfBuffer = await renderPdfFromHtml(html)
   const runtimeConfig = await getStoredEmailConfigForSending()
-  const extratoOriginal = await getExtratoOriginalPdfByDate(data.dataReferencia)
+  const extratoOriginal = await getExtratoOriginalPdfByDate(data.dataReferencia, data.contaSelecionada || undefined)
 
   if (!extratoOriginal) {
     const latest = await getLatestExtratoOriginalPdfMeta()

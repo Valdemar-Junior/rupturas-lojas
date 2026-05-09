@@ -29,6 +29,10 @@ const tabs = [
   {
     to: '/financeiro/relatorio-diario',
     label: 'Relatorio diario'
+  },
+  {
+    to: '/financeiro/configuracoes',
+    label: 'Configuracoes'
   }
 ]
 

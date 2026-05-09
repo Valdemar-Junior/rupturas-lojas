@@ -121,8 +121,15 @@ export default defineEventHandler(async (event) => {
   }
 
   const dataReferencia = sanitizeDate(upload.dataReferenciaRaw)
-  const banco = upload.bancoRaw.trim() || 'Conta principal'
+  const banco = upload.bancoRaw.trim()
   const substituir = parseBool(upload.substituirRaw, true)
+
+  if (!banco) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Selecione a conta caixa/banco antes de enviar o extrato.'
+    })
+  }
 
   const creditos = await extractCreditEntriesFromPdf(fileBuffer, dataReferencia)
 
@@ -134,6 +141,7 @@ export default defineEventHandler(async (event) => {
       .from(extratoTable)
       .delete()
       .eq('data_referencia', dataReferencia)
+      .eq('banco', banco)
 
     if (deleteError && !isMissingTableError(deleteError)) {
       throw createError({
@@ -185,7 +193,7 @@ export default defineEventHandler(async (event) => {
     fileBuffer
   })
 
-  const extratoPersistido = await getExtratoOriginalPdfByDate(dataReferencia)
+  const extratoPersistido = await getExtratoOriginalPdfByDate(dataReferencia, banco)
   if (!extratoPersistido) {
     throw createError({
       statusCode: 500,

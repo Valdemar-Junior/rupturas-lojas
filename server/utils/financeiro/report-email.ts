@@ -309,7 +309,10 @@ function resolveMailConfigFromEnv(): MailConfig {
 
 function buildEmailSubject(data: DailyFinanceReportData, subjectPrefix?: string): string {
   const dateLabel = formatDateBR(data.dataReferencia)
-  const title = `Relatorio financeiro diario - ${dateLabel}`
+  const contaLabel = data.contaSelecionada?.trim()
+  const title = contaLabel
+    ? `Relatorio financeiro diario - ${contaLabel} - ${dateLabel}`
+    : `Relatorio financeiro diario - ${dateLabel}`
   return subjectPrefix ? `${subjectPrefix} ${title}` : title
 }
 

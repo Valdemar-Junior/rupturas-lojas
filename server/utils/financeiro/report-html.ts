@@ -55,8 +55,10 @@ function renderTitulosPagosRows(rows: TituloPagoView[]): string {
       <tr>
         <td>${index + 1}</td>
         <td>${escapeHtml(row.numeroTitulo)}</td>
+        <td>${escapeHtml(row.parcela)}</td>
         <td>${escapeHtml(row.fornecedor)}</td>
         <td>${escapeHtml(row.historico)}</td>
+        <td>${escapeHtml(row.usuarioLogin)}</td>
         <td>${escapeHtml(row.complemento)}</td>
         <td>${escapeHtml(row.contaCaixaBanco)}</td>
         <td>${escapeHtml(row.formaPagamento)}</td>
@@ -65,7 +67,7 @@ function renderTitulosPagosRows(rows: TituloPagoView[]): string {
       </tr>`
     },
     'Nenhum titulo pago no dia de referencia.',
-    9
+    11
   )
 }
 
@@ -475,11 +477,13 @@ export function renderDailyFinanceReportHtml(payload: DailyFinanceReportData): s
           <tr>
             <th style="width: 5%">#</th>
             <th style="width: 11%">Titulo</th>
-            <th style="width: 19%">Fornecedor</th>
-            <th style="width: 14%">Historico</th>
-            <th style="width: 14%">Complemento</th>
-            <th style="width: 12%">Conta caixa/banco</th>
-            <th style="width: 9%">Forma pgto</th>
+            <th style="width: 7%">Parcela</th>
+            <th style="width: 14%">Fornecedor</th>
+            <th style="width: 12%">Historico</th>
+            <th style="width: 9%">Login baixa</th>
+            <th style="width: 12%">Complemento</th>
+            <th style="width: 11%">Conta caixa/banco</th>
+            <th style="width: 8%">Forma pgto</th>
             <th style="width: 8%">Data baixa</th>
             <th style="width: 8%; text-align: right;">Valor pago</th>
           </tr>

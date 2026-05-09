@@ -41,10 +41,27 @@ function sanitizeDateInput(value: unknown): string {
   return raw
 }
 
+function sanitizeContaInput(value: unknown): string | undefined {
+  const raw = String(value || '').trim()
+  return raw || undefined
+}
+
 function endOfDay(date: Date): Date {
   const copy = new Date(date)
   copy.setHours(23, 59, 59, 999)
   return copy
+}
+
+function normalizeAccountKey(value: string | null | undefined): string {
+  return normalizeText(value, '').trim().toLowerCase()
+}
+
+function isBancoAccountType(value: string | null | undefined): boolean {
+  return normalizeAccountKey(value) === 'banco'
+}
+
+function resolveContaCaixaBanco(row: TituloFinanceiroResumo): string {
+  return row.conta_caixa?.trim() || row.tipo_conta?.trim() || '--'
 }
 
 function mapCreditoExtrato(row: ExtratoCreditoDiario): CreditoExtratoView {
@@ -59,12 +76,15 @@ function mapCreditoExtrato(row: ExtratoCreditoDiario): CreditoExtratoView {
 
 function mapTituloPago(row: TituloFinanceiroResumo): TituloPagoView {
   const valorPago = Math.max(toNumber(row.valor_baixa), toNumber(row.valor_pago))
-  const contaCaixaBanco = row.conta_caixa?.trim() || row.tipo_conta?.trim() || '--'
+  const contaCaixaBanco = resolveContaCaixaBanco(row)
+  const historico = row.historico?.trim() || row.origem_lancamento?.trim() || '--'
 
   return {
     numeroTitulo: normalizeText(row.numero_titulo),
+    parcela: normalizeText(row.sufixo === null || row.sufixo === undefined ? null : String(row.sufixo)),
     fornecedor: normalizeText(row.fornecedor),
-    historico: normalizeText(row.historico),
+    historico,
+    usuarioLogin: normalizeText(row.usuario_login),
     complemento: normalizeText(row.complemento),
     formaPagamento: normalizeText(row.forma_pagamento),
     contaCaixaBanco,
@@ -107,10 +127,51 @@ function isMissingTableError(error: unknown): boolean {
 
 export interface BuildDailyFinanceReportDataOptions {
   dataReferencia?: string
+  contaCaixaBanco?: string
+  agruparPagosPorFornecedor?: boolean
+}
+
+function aggregatePaidTitlesBySupplier(rows: TituloPagoView[]): TituloPagoView[] {
+  const grouped = new Map<string, TituloPagoView>()
+
+  for (const row of rows) {
+    const key = row.fornecedor.trim().toLowerCase()
+    const existing = grouped.get(key)
+    if (!existing) {
+      grouped.set(key, {
+        numeroTitulo: 'Agrupado',
+        parcela: 'Total',
+        fornecedor: row.fornecedor,
+        historico: 'Agrupado por fornecedor',
+        usuarioLogin: 'Diversos',
+        complemento: '--',
+        formaPagamento: row.formaPagamento,
+        contaCaixaBanco: row.contaCaixaBanco,
+        dataBaixa: row.dataBaixa,
+        valorPago: row.valorPago
+      })
+      continue
+    }
+
+    existing.valorPago += row.valorPago
+    if (existing.formaPagamento !== row.formaPagamento) {
+      existing.formaPagamento = 'Diversos'
+    }
+    if (existing.contaCaixaBanco !== row.contaCaixaBanco) {
+      existing.contaCaixaBanco = 'Diversas'
+    }
+    if (existing.usuarioLogin !== row.usuarioLogin) {
+      existing.usuarioLogin = 'Diversos'
+    }
+  }
+
+  return Array.from(grouped.values()).sort((a, b) => b.valorPago - a.valorPago)
 }
 
 export async function buildDailyFinanceReportData(options: BuildDailyFinanceReportDataOptions = {}): Promise<DailyFinanceReportData> {
   const dataReferencia = sanitizeDateInput(options.dataReferencia)
+  const contaSelecionada = sanitizeContaInput(options.contaCaixaBanco)
+  const agruparPagosPorFornecedor = !!options.agruparPagosPorFornecedor
   const referenceDate = parseDate(dataReferencia)
 
   if (!referenceDate) {
@@ -157,7 +218,7 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     error: titulosError
   } = await supabase
     .from(titulosTable)
-    .select('id,numero_titulo,fornecedor,historico,complemento,forma_pagamento,conta_caixa,tipo_conta,situacao_titulo,data_baixa,data_ultimo_pagamento,data_vencimento,valor_pago,valor_baixa,valor_pendente')
+    .select('id,numero_titulo,sufixo,fornecedor,historico,origem_lancamento,complemento,forma_pagamento,conta_caixa,tipo_conta,situacao_titulo,data_baixa,data_ultimo_pagamento,data_vencimento,valor_pago,valor_baixa,valor_pendente,usuario_login')
     .order('id', { ascending: false })
     .limit(15000)
 
@@ -176,8 +237,27 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
   }
 
   const titulosRows = (titulosData as TituloFinanceiroResumo[]) || []
+  const contaSelecionadaKey = normalizeAccountKey(contaSelecionada)
 
-  const titulosPagosNoDia = titulosRows
+  const availableContas = Array.from(
+    new Set(
+      titulosRows
+        .filter((row) => isBancoAccountType(row.tipo_conta))
+        .map((row) => resolveContaCaixaBanco(row))
+        .map((value) => value.trim())
+        .filter((value) => value && value !== '--')
+    )
+  ).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+
+  const filteredExtratoRows = contaSelecionadaKey
+    ? extratoRows.filter((row) => normalizeAccountKey(row.banco) === contaSelecionadaKey)
+    : extratoRows
+
+  const filteredTitulosRows = contaSelecionadaKey
+    ? titulosRows.filter((row) => normalizeAccountKey(resolveContaCaixaBanco(row)) === contaSelecionadaKey)
+    : titulosRows
+
+  const titulosPagosBase = filteredTitulosRows
     .map(mapTituloPago)
     .filter((row) => {
       if (row.valorPago <= 0) return false
@@ -187,7 +267,11 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     })
     .sort((a, b) => b.valorPago - a.valorPago)
 
-  const titulosPendentesAteHoje = titulosRows
+  const titulosPagosNoDia = agruparPagosPorFornecedor
+    ? aggregatePaidTitlesBySupplier(titulosPagosBase)
+    : titulosPagosBase
+
+  const titulosPendentesAteHoje = filteredTitulosRows
     .map(mapTituloPendente)
     .filter((row) => {
       if (row.valorPendente <= 0) return false
@@ -197,7 +281,7 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     })
     .sort((a, b) => b.valorPendente - a.valorPendente)
 
-  const creditosExtrato = extratoRows
+  const creditosExtrato = filteredExtratoRows
     .map(mapCreditoExtrato)
     .filter((row) => row.valor > 0)
 
@@ -207,15 +291,25 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
   const saldoDoDia = totalCreditosExtrato - totalTitulosPagosNoDia
 
   if (creditosExtrato.length === 0) {
-    avisos.push('Nenhum credito de extrato encontrado para a data de referencia.')
+    avisos.push(
+      contaSelecionada
+        ? `Nenhum credito de extrato encontrado para a data de referencia na conta ${contaSelecionada}.`
+        : 'Nenhum credito de extrato encontrado para a data de referencia.'
+    )
   }
 
   if (titulosPagosNoDia.length === 0) {
-    avisos.push('Nenhum titulo pago encontrado para a data de referencia.')
+    avisos.push(
+      contaSelecionada
+        ? `Nenhum titulo pago encontrado para a data de referencia na conta ${contaSelecionada}.`
+        : 'Nenhum titulo pago encontrado para a data de referencia.'
+    )
   }
 
   return {
     dataReferencia,
+    contaSelecionada: contaSelecionada || null,
+    availableContas,
     geradoEmIso: new Date().toISOString(),
     creditosExtrato,
     titulosPagosNoDia,

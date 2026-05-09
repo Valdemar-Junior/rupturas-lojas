@@ -12,8 +12,9 @@ function sanitizeDate(value: unknown): string {
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const dataReferencia = sanitizeDate(query.data)
+  const contaCaixaBanco = typeof query.conta === 'string' ? query.conta.trim() : ''
 
-  const extrato = await getExtratoOriginalPdfByDate(dataReferencia)
+  const extrato = await getExtratoOriginalPdfByDate(dataReferencia, contaCaixaBanco || undefined)
   const latest = await getLatestExtratoOriginalPdfMeta()
 
   return {

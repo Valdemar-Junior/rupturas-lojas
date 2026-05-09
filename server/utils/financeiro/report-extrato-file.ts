@@ -95,6 +95,7 @@ export async function saveExtratoOriginalPdf(options: {
     .from(table)
     .delete()
     .eq('data_referencia', options.dataReferencia)
+    .eq('banco', options.banco?.trim() || null)
 
   if (deleteError) {
     if (isMissingTableError(deleteError)) {
@@ -129,14 +130,21 @@ export async function saveExtratoOriginalPdf(options: {
   }
 }
 
-export async function getExtratoOriginalPdfByDate(dataReferencia: string): Promise<StoredExtratoPdf | null> {
+export async function getExtratoOriginalPdfByDate(dataReferencia: string, banco?: string): Promise<StoredExtratoPdf | null> {
   const table = getExtratoFileTableName()
   const supabase = getFinanceiroSupabaseServiceClient()
 
-  const { data, error } = await supabase
+  let query = supabase
     .from(table)
     .select('data_referencia,banco,arquivo_nome,arquivo_mime_type,arquivo_base64,tamanho_bytes,updated_at')
     .eq('data_referencia', dataReferencia)
+
+  const bancoSanitizado = banco?.trim()
+  if (bancoSanitizado) {
+    query = query.eq('banco', bancoSanitizado)
+  }
+
+  const { data, error } = await query
     .order('updated_at', { ascending: false, nullsFirst: false })
     .limit(1)
 
