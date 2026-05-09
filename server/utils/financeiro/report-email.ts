@@ -309,11 +309,10 @@ function resolveMailConfigFromEnv(): MailConfig {
 
 function buildEmailSubject(data: DailyFinanceReportData, subjectPrefix?: string): string {
   const dateLabel = formatDateBR(data.dataReferencia)
-  const periodLabel = formatDateRangeBR(data.periodoTitulosInicio, data.periodoTitulosFim)
   const contaLabel = data.contaSelecionada?.trim()
   const title = contaLabel
-    ? `Relatorio financeiro diario - ${contaLabel} - extrato ${dateLabel} - mov ${periodLabel}`
-    : `Relatorio financeiro diario - extrato ${dateLabel} - mov ${periodLabel}`
+    ? `Relatorio financeiro diario - ${contaLabel} - ${dateLabel}`
+    : `Relatorio financeiro diario - ${dateLabel}`
   const subject = subjectPrefix ? `${subjectPrefix} ${title}` : title
   return subject.toLocaleUpperCase('pt-BR')
 }
@@ -326,16 +325,16 @@ function buildEmailBody(data: DailyFinanceReportData): string {
     <p>Segue o movimento do ${contaLabel}.</p>
     <p>
       Data do extrato: ${formatDateBR(data.dataReferencia)}<br>
-      Periodo dos titulos: ${formatDateRangeBR(data.periodoTitulosInicio, data.periodoTitulosFim)}<br>
       Conta: ${contaLabel}<br>
       Creditos do extrato: ${formatCurrencyBRL(data.totalCreditosExtrato)}<br>
-      Titulos pagos no periodo: ${formatCurrencyBRL(data.totalTitulosPagosNoDia)}<br>
-      Pendentes ate a data final: ${formatCurrencyBRL(data.totalTitulosPendentesAteHoje)}<br>
+      Titulos pagos no periodo: ${formatCurrencyBRL(data.totalTitulosPagosNoDia)}
+    </p>
+    <p>
       Saldo do dia: ${formatCurrencyBRL(data.saldoDoDia)}
     </p>
-    <p>Os anexos incluem o PDF detalhado do relatorio e o PDF original do extrato bancario.</p>
+    <p>Os anexos incluem o PDF detalhado do relatorio e o PDF do extrato bancario.</p>
     <p>Qualquer duvida, estou a disposicao.</p>
-    <p>Atenciosamente,<br>Maria Luiza Rofrigues</p>
+    <p><strong>Atenciosamente,</strong><br>Maria Luiza Rodrigues<br><em>Auxiliar Financeiro</em></p>
   </div>`
 }
 
