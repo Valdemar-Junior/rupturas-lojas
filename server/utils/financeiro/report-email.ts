@@ -314,23 +314,28 @@ function buildEmailSubject(data: DailyFinanceReportData, subjectPrefix?: string)
   const title = contaLabel
     ? `Relatorio financeiro diario - ${contaLabel} - extrato ${dateLabel} - mov ${periodLabel}`
     : `Relatorio financeiro diario - extrato ${dateLabel} - mov ${periodLabel}`
-  return subjectPrefix ? `${subjectPrefix} ${title}` : title
+  const subject = subjectPrefix ? `${subjectPrefix} ${title}` : title
+  return subject.toLocaleUpperCase('pt-BR')
 }
 
 function buildEmailBody(data: DailyFinanceReportData): string {
+  const contaLabel = data.contaSelecionada?.trim() || '--'
+
   return `
   <div style="font-family:Segoe UI,Tahoma,sans-serif;color:#0f172a;line-height:1.45;">
-    <p>O relatorio financeiro diario foi processado com sucesso.</p>
-    <ul>
-      <li><strong>Data do extrato:</strong> ${formatDateBR(data.dataReferencia)}</li>
-      <li><strong>Periodo dos titulos:</strong> ${formatDateRangeBR(data.periodoTitulosInicio, data.periodoTitulosFim)}</li>
-      <li><strong>Conta:</strong> ${data.contaSelecionada?.trim() || '--'}</li>
-      <li><strong>Creditos do extrato:</strong> ${formatCurrencyBRL(data.totalCreditosExtrato)}</li>
-      <li><strong>Titulos pagos no periodo:</strong> ${formatCurrencyBRL(data.totalTitulosPagosNoDia)}</li>
-      <li><strong>Pendentes ate a data final:</strong> ${formatCurrencyBRL(data.totalTitulosPendentesAteHoje)}</li>
-      <li><strong>Saldo do dia:</strong> ${formatCurrencyBRL(data.saldoDoDia)}</li>
-    </ul>
-    <p>Os anexos incluem o PDF detalhado do relatorio e o PDF original do extrato do banco.</p>
+    <p>Segue o movimento do ${contaLabel}.</p>
+    <p>
+      Data do extrato: ${formatDateBR(data.dataReferencia)}<br>
+      Periodo dos titulos: ${formatDateRangeBR(data.periodoTitulosInicio, data.periodoTitulosFim)}<br>
+      Conta: ${contaLabel}<br>
+      Creditos do extrato: ${formatCurrencyBRL(data.totalCreditosExtrato)}<br>
+      Titulos pagos no periodo: ${formatCurrencyBRL(data.totalTitulosPagosNoDia)}<br>
+      Pendentes ate a data final: ${formatCurrencyBRL(data.totalTitulosPendentesAteHoje)}<br>
+      Saldo do dia: ${formatCurrencyBRL(data.saldoDoDia)}
+    </p>
+    <p>Os anexos incluem o PDF detalhado do relatorio e o PDF original do extrato bancario.</p>
+    <p>Qualquer duvida, estou a disposicao.</p>
+    <p>Atenciosamente,<br>Maria Luiza Rofrigues</p>
   </div>`
 }
 
