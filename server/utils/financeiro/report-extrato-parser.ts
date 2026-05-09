@@ -312,6 +312,25 @@ function parseDateLeadingCreditLine(line: string): ParsedCreditLineTokens | null
   }
 }
 
+function parseSaldoAnteriorLine(line: string, referenceDate: string): ParsedExtratoCredito | null {
+  const normalized = normalizeText(line)
+  if (!normalized.includes('saldo anterior')) return null
+
+  const amountMatches = Array.from(line.matchAll(new RegExp(CURRENCY_TOKEN_REGEX, 'g')))
+  const lastAmount = amountMatches.at(-1)?.[1]
+  if (!lastAmount) return null
+
+  const valor = parseCurrency(lastAmount)
+  if (!Number.isFinite(valor) || valor === 0) return null
+
+  return {
+    dataMovimento: referenceDate,
+    descricao: 'SALDO ANTERIOR',
+    documento: 'SALDO',
+    valor
+  }
+}
+
 function dedupeCredits(rows: ParsedExtratoCredito[]): ParsedExtratoCredito[] {
   const map = new Map<string, ParsedExtratoCredito>()
 
@@ -401,6 +420,12 @@ export async function extractCreditEntriesFromPdf(fileBuffer: Buffer, referenceD
   const output: ParsedExtratoCredito[] = []
 
   for (const line of lines) {
+    const saldoAnterior = parseSaldoAnteriorLine(line, referenceDate)
+    if (saldoAnterior) {
+      output.push(saldoAnterior)
+      continue
+    }
+
     const indexedLine = parseIndexedCreditLine(line)
     const parsedLine = indexedLine || parseDateLeadingCreditLine(line)
     if (!parsedLine) continue
