@@ -324,15 +324,15 @@ function buildEmailBody(data: DailyFinanceReportData): string {
   <div style="font-family:Segoe UI,Tahoma,sans-serif;color:#0f172a;line-height:1.45;">
     <p>Segue o movimento do ${contaLabel}.</p>
     <p>
-      Data do extrato: ${formatDateBR(data.dataReferencia)}<br>
-      Conta: ${contaLabel}<br>
-      Creditos do extrato: ${formatCurrencyBRL(data.totalCreditosExtrato)}<br>
-      Titulos pagos no periodo: ${formatCurrencyBRL(data.totalTitulosPagosNoDia)}
+      <strong>Data do extrato:</strong> ${formatDateBR(data.dataReferencia)}<br>
+      <strong>Conta:</strong> ${contaLabel}<br>
+      <strong>Creditos do extrato:</strong> ${formatCurrencyBRL(data.totalCreditosExtrato)}<br>
+      <strong>Titulos pagos no periodo:</strong> ${formatCurrencyBRL(data.totalTitulosPagosNoDia)}
     </p>
     <p>
-      Saldo do dia: ${formatCurrencyBRL(data.saldoDoDia)}
+      <strong>Saldo do dia:</strong> ${formatCurrencyBRL(data.saldoDoDia)}
     </p>
-    <p>Os anexos incluem o PDF detalhado do relatorio e o PDF do extrato bancario.</p>
+  <p>Os anexos incluem o PDF detalhado do relatorio e o PDF do extrato bancario.</p>
     <p>Qualquer duvida, estou a disposicao.</p>
     <p><strong>Atenciosamente,</strong><br>Maria Luiza Rodrigues<br><em>Auxiliar Financeiro</em></p>
   </div>`
