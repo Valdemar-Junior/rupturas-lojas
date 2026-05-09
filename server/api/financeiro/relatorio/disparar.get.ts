@@ -15,12 +15,16 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
 
   const dataReferencia = typeof query.data === 'string' ? query.data : undefined
+  const periodoTitulosInicio = typeof query.data_inicio === 'string' ? query.data_inicio : undefined
+  const periodoTitulosFim = typeof query.data_fim === 'string' ? query.data_fim : undefined
   const contaCaixaBanco = typeof query.conta === 'string' ? query.conta : undefined
   const exigirCreditoExtrato = parseBoolean(query.exigir_credito, true)
   const agruparPagosPorFornecedor = parseBoolean(query.agrupar_fornecedor, false)
 
   const result = await runDailyFinanceReport({
     dataReferencia,
+    periodoTitulosInicio,
+    periodoTitulosFim,
     contaCaixaBanco,
     exigirCreditoExtrato,
     agruparPagosPorFornecedor

@@ -15,11 +15,29 @@
           </p>
         </div>
 
-        <div class="grid gap-3 md:grid-cols-2">
+        <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label class="w-full rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm">
-            <span class="block text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100">Data do movimento</span>
+            <span class="block text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100">Data do extrato</span>
             <input
               v-model="selectedDate"
+              type="date"
+              class="mt-2 w-full rounded-xl border border-white/25 bg-slate-950/20 px-3 py-2 text-sm text-white outline-none"
+            >
+          </label>
+
+          <label class="w-full rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm">
+            <span class="block text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100">Titulos de</span>
+            <input
+              v-model="selectedPeriodStart"
+              type="date"
+              class="mt-2 w-full rounded-xl border border-white/25 bg-slate-950/20 px-3 py-2 text-sm text-white outline-none"
+            >
+          </label>
+
+          <label class="w-full rounded-2xl border border-white/20 bg-white/10 px-4 py-3 text-sm">
+            <span class="block text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-100">Titulos ate</span>
+            <input
+              v-model="selectedPeriodEnd"
               type="date"
               class="mt-2 w-full rounded-xl border border-white/25 bg-slate-950/20 px-3 py-2 text-sm text-white outline-none"
             >
@@ -100,7 +118,8 @@
       <div class="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
         <div class="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
           <p class="font-semibold">Contexto atual</p>
-          <p class="mt-1">Data: {{ formatDate(selectedDate) }}</p>
+          <p class="mt-1">Data do extrato: {{ formatDate(selectedDate) }}</p>
+          <p class="mt-1">Periodo dos titulos: {{ formatDateRange(selectedPeriodStart, selectedPeriodEnd) }}</p>
           <p class="mt-1">Conta ERP: {{ selectedConta || 'nao selecionada' }}</p>
         </div>
 
@@ -149,7 +168,7 @@
         <p class="mt-1 text-xl font-bold text-emerald-700">{{ formatCurrency(report?.totalCreditosExtrato || 0) }}</p>
       </article>
       <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.6)]">
-        <p class="text-[11px] uppercase tracking-[0.14em] text-slate-500">Titulos pagos no dia</p>
+        <p class="text-[11px] uppercase tracking-[0.14em] text-slate-500">Titulos pagos no periodo</p>
         <p class="mt-1 text-xl font-bold text-rose-700">{{ formatCurrency(report?.totalTitulosPagosNoDia || 0) }}</p>
       </article>
       <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.6)]">
@@ -179,7 +198,7 @@
           <p class="text-xs uppercase tracking-[0.14em] text-slate-500">Saida do relatorio</p>
           <h2 class="mt-1 text-base font-bold text-slate-900">Visualizar, gerar PDF ou enviar</h2>
           <p class="mt-1 text-sm text-slate-600">
-            O preview, o PDF e o envio consideram a data, a conta e o modo de exibicao selecionados no topo da tela.
+            O preview, o PDF e o envio consideram a data do extrato, o periodo dos titulos, a conta e o modo de exibicao selecionados no topo da tela.
           </p>
         </div>
 
@@ -244,7 +263,7 @@
 
     <section class="rounded-2xl border border-slate-200 bg-white shadow-[0_18px_42px_-34px_rgba(15,23,42,0.6)]">
       <header class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <h2 class="text-sm font-semibold text-slate-800">Titulos pagos no dia</h2>
+        <h2 class="text-sm font-semibold text-slate-800">Titulos pagos no periodo</h2>
         <span class="text-xs font-semibold text-slate-500">{{ report?.titulosPagosNoDia.length || 0 }} registros</span>
       </header>
       <div class="max-h-[360px] overflow-auto">
@@ -286,7 +305,7 @@
 
     <section class="rounded-2xl border border-slate-200 bg-white shadow-[0_18px_42px_-34px_rgba(15,23,42,0.6)]">
       <header class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <h2 class="text-sm font-semibold text-slate-800">Pendentes ate a data de referencia</h2>
+        <h2 class="text-sm font-semibold text-slate-800">Pendentes ate a data final</h2>
         <span class="text-xs font-semibold text-slate-500">{{ report?.titulosPendentesAteHoje.length || 0 }} registros</span>
       </header>
       <div class="max-h-[360px] overflow-auto">
@@ -353,6 +372,8 @@ type TituloPendente = {
 
 type ReportPayload = {
   dataReferencia: string
+  periodoTitulosInicio: string
+  periodoTitulosFim: string
   contaSelecionada: string | null
   availableContas: string[]
   geradoEmIso: string
@@ -367,6 +388,8 @@ type ReportPayload = {
 }
 
 const selectedDate = ref(getTodayInputDate())
+const selectedPeriodStart = ref(getTodayInputDate())
+const selectedPeriodEnd = ref(getTodayInputDate())
 const selectedConta = ref('')
 const groupPaidBySupplier = ref(false)
 const pending = ref(false)
@@ -386,23 +409,23 @@ const emailError = ref('')
 const flowSteps = [
   {
     index: '01',
-    title: 'Escolher a data',
-    description: 'Defina a data do movimento financeiro que sera consolidada.'
+    title: 'Escolher o extrato',
+    description: 'Defina a data do extrato bancario que concentra os creditos importados.'
   },
   {
     index: '02',
-    title: 'Selecionar a conta',
-    description: 'Escolha a conta caixa/banco do ERP para filtrar pagos e pendentes.'
+    title: 'Definir o periodo',
+    description: 'Escolha a data inicial e final dos titulos pagos e pendentes no ERP.'
   },
   {
     index: '03',
-    title: 'Subir o extrato',
-    description: 'Envie o PDF dessa mesma conta para ler apenas os creditos correspondentes.'
+    title: 'Selecionar a conta',
+    description: 'Escolha a conta banco do ERP para cruzar o extrato com pagos e pendentes.'
   },
   {
     index: '04',
     title: 'Conferir e enviar',
-    description: 'Revise creditos, pagos e pendentes da conta selecionada antes de enviar.'
+    description: 'Revise creditos do extrato e titulos do periodo selecionado antes de enviar.'
   }
 ]
 
@@ -440,6 +463,14 @@ function formatDate(value: string | null | undefined): string {
     month: '2-digit',
     year: 'numeric'
   }).format(parsed)
+}
+
+function formatDateRange(start: string | null | undefined, end: string | null | undefined): string {
+  if (!start && !end) return '--'
+  const startLabel = formatDate(start)
+  const endLabel = formatDate(end)
+  if (start && end && start === end) return startLabel
+  return `${startLabel} a ${endLabel}`
 }
 
 function isValidIsoDate(value: string): boolean {
@@ -487,8 +518,13 @@ async function loadPersistedExtrato() {
 }
 
 async function loadReport() {
-  if (!isValidIsoDate(selectedDate.value)) {
-    errorMessage.value = 'Data invalida. Use o formato YYYY-MM-DD no seletor de data.'
+  if (!isValidIsoDate(selectedDate.value) || !isValidIsoDate(selectedPeriodStart.value) || !isValidIsoDate(selectedPeriodEnd.value)) {
+    errorMessage.value = 'Datas invalidas. Use o formato YYYY-MM-DD nos seletores.'
+    return
+  }
+
+  if (selectedPeriodStart.value > selectedPeriodEnd.value) {
+    errorMessage.value = 'A data inicial do periodo nao pode ser maior que a data final.'
     return
   }
 
@@ -499,6 +535,8 @@ async function loadReport() {
     const response = await $fetch<{ success: boolean; data: ReportPayload }>('/api/financeiro/relatorio/dados', {
       query: {
         data: selectedDate.value,
+        data_inicio: selectedPeriodStart.value,
+        data_fim: selectedPeriodEnd.value,
         conta: selectedConta.value || undefined,
         agrupar_fornecedor: groupPaidBySupplier.value ? '1' : '0'
       }
@@ -518,6 +556,8 @@ async function loadReport() {
 
 function buildReportQuery() {
   const query = new URLSearchParams({ data: selectedDate.value })
+  query.set('data_inicio', selectedPeriodStart.value)
+  query.set('data_fim', selectedPeriodEnd.value)
   if (selectedConta.value) {
     query.set('conta', selectedConta.value)
   }
@@ -551,8 +591,13 @@ function clearEmailFeedback() {
 }
 
 async function sendManualReportEmail() {
-  if (!isValidIsoDate(selectedDate.value)) {
-    emailError.value = 'Data invalida para envio. Selecione uma data valida.'
+  if (!isValidIsoDate(selectedDate.value) || !isValidIsoDate(selectedPeriodStart.value) || !isValidIsoDate(selectedPeriodEnd.value)) {
+    emailError.value = 'Datas invalidas para envio. Selecione datas validas.'
+    return
+  }
+
+  if (selectedPeriodStart.value > selectedPeriodEnd.value) {
+    emailError.value = 'A data inicial do periodo nao pode ser maior que a data final.'
     return
   }
 
@@ -578,6 +623,8 @@ async function sendManualReportEmail() {
       method: 'POST',
       body: {
         data: selectedDate.value,
+        data_inicio: selectedPeriodStart.value,
+        data_fim: selectedPeriodEnd.value,
         conta: selectedConta.value,
         exigir_credito: true,
         agrupar_fornecedor: groupPaidBySupplier.value
@@ -592,7 +639,7 @@ async function sendManualReportEmail() {
     const extratoSize = Number(response.anexoExtrato?.sizeBytes || 0)
     const extratoSizeKb = extratoSize > 0 ? `${(extratoSize / 1024).toFixed(1)} KB` : '--'
 
-    emailMessage.value = `Relatorio enviado com sucesso (${response.dataReferencia}) para a conta ${selectedConta.value}. Destinatarios: ${destinatarios}. Extrato anexado: ${extratoNome} (${extratoSizeKb}).`
+    emailMessage.value = `Relatorio enviado com sucesso. Extrato: ${formatDate(response.dataReferencia)}. Periodo dos titulos: ${formatDateRange(selectedPeriodStart.value, selectedPeriodEnd.value)}. Conta: ${selectedConta.value}. Destinatarios: ${destinatarios}. Extrato anexado: ${extratoNome} (${extratoSizeKb}).`
     await loadReport()
   } catch (error: any) {
     console.error(error)
@@ -669,8 +716,18 @@ async function uploadExtrato() {
   }
 }
 
-watch([selectedDate, selectedConta, groupPaidBySupplier], ([dateValue, contaValue, agruparValue], [previousDate, previousConta, previousAgrupar]) => {
-  if ((dateValue === previousDate && contaValue === previousConta && agruparValue === previousAgrupar) || !isValidIsoDate(dateValue)) return
+watch([selectedDate, selectedPeriodStart, selectedPeriodEnd, selectedConta, groupPaidBySupplier], ([dateValue, periodStart, periodEnd, contaValue, agruparValue], [previousDate, previousPeriodStart, previousPeriodEnd, previousConta, previousAgrupar]) => {
+  if (
+    (dateValue === previousDate &&
+      periodStart === previousPeriodStart &&
+      periodEnd === previousPeriodEnd &&
+      contaValue === previousConta &&
+      agruparValue === previousAgrupar) ||
+    !isValidIsoDate(dateValue) ||
+    !isValidIsoDate(periodStart) ||
+    !isValidIsoDate(periodEnd) ||
+    periodStart > periodEnd
+  ) return
   uploadMessage.value = ''
   uploadError.value = ''
   emailMessage.value = ''

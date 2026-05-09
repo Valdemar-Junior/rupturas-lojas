@@ -1,7 +1,7 @@
 import { createError } from 'h3'
 import nodemailer from 'nodemailer'
 import type { DailyFinanceReportData } from './report-types'
-import { formatCurrencyBRL, formatDateBR } from './report-types'
+import { formatCurrencyBRL, formatDateBR, formatDateRangeBR } from './report-types'
 
 interface MailConfig {
   host: string
@@ -309,10 +309,11 @@ function resolveMailConfigFromEnv(): MailConfig {
 
 function buildEmailSubject(data: DailyFinanceReportData, subjectPrefix?: string): string {
   const dateLabel = formatDateBR(data.dataReferencia)
+  const periodLabel = formatDateRangeBR(data.periodoTitulosInicio, data.periodoTitulosFim)
   const contaLabel = data.contaSelecionada?.trim()
   const title = contaLabel
-    ? `Relatorio financeiro diario - ${contaLabel} - ${dateLabel}`
-    : `Relatorio financeiro diario - ${dateLabel}`
+    ? `Relatorio financeiro diario - ${contaLabel} - extrato ${dateLabel} - mov ${periodLabel}`
+    : `Relatorio financeiro diario - extrato ${dateLabel} - mov ${periodLabel}`
   return subjectPrefix ? `${subjectPrefix} ${title}` : title
 }
 
@@ -321,10 +322,12 @@ function buildEmailBody(data: DailyFinanceReportData): string {
   <div style="font-family:Segoe UI,Tahoma,sans-serif;color:#0f172a;line-height:1.45;">
     <p>O relatorio financeiro diario foi processado com sucesso.</p>
     <ul>
-      <li><strong>Data de referencia:</strong> ${formatDateBR(data.dataReferencia)}</li>
+      <li><strong>Data do extrato:</strong> ${formatDateBR(data.dataReferencia)}</li>
+      <li><strong>Periodo dos titulos:</strong> ${formatDateRangeBR(data.periodoTitulosInicio, data.periodoTitulosFim)}</li>
+      <li><strong>Conta:</strong> ${data.contaSelecionada?.trim() || '--'}</li>
       <li><strong>Creditos do extrato:</strong> ${formatCurrencyBRL(data.totalCreditosExtrato)}</li>
-      <li><strong>Titulos pagos no dia:</strong> ${formatCurrencyBRL(data.totalTitulosPagosNoDia)}</li>
-      <li><strong>Pendentes ate hoje:</strong> ${formatCurrencyBRL(data.totalTitulosPendentesAteHoje)}</li>
+      <li><strong>Titulos pagos no periodo:</strong> ${formatCurrencyBRL(data.totalTitulosPagosNoDia)}</li>
+      <li><strong>Pendentes ate a data final:</strong> ${formatCurrencyBRL(data.totalTitulosPendentesAteHoje)}</li>
       <li><strong>Saldo do dia:</strong> ${formatCurrencyBRL(data.saldoDoDia)}</li>
     </ul>
     <p>Os anexos incluem o PDF detalhado do relatorio e o PDF original do extrato do banco.</p>

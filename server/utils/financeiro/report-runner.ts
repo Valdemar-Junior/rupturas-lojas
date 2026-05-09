@@ -9,6 +9,8 @@ import type { DailyFinanceReportRunResult } from './report-types'
 
 export interface RunDailyFinanceReportOptions {
   dataReferencia?: string
+  periodoTitulosInicio?: string
+  periodoTitulosFim?: string
   contaCaixaBanco?: string
   exigirCreditoExtrato?: boolean
   agruparPagosPorFornecedor?: boolean
@@ -17,6 +19,8 @@ export interface RunDailyFinanceReportOptions {
 export async function runDailyFinanceReport(options: RunDailyFinanceReportOptions = {}): Promise<DailyFinanceReportRunResult> {
   const data = await buildDailyFinanceReportData({
     dataReferencia: options.dataReferencia,
+    periodoTitulosInicio: options.periodoTitulosInicio,
+    periodoTitulosFim: options.periodoTitulosFim,
     contaCaixaBanco: options.contaCaixaBanco,
     agruparPagosPorFornecedor: options.agruparPagosPorFornecedor
   })

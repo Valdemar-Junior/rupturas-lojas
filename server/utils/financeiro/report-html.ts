@@ -4,7 +4,7 @@ import type {
   TituloPagoView,
   TituloPendenteView
 } from './report-types'
-import { formatCurrencyBRL, formatDateBR } from './report-types'
+import { formatCurrencyBRL, formatDateBR, formatDateRangeBR } from './report-types'
 
 function escapeHtml(value: string): string {
   return value
@@ -416,10 +416,11 @@ export function renderDailyFinanceReportHtml(payload: DailyFinanceReportData): s
         <div>
           <p class="eyebrow">Control Tower Financeiro</p>
           <h1 class="title">Relatorio Diario de Receita e Pagamentos</h1>
-          <p class="subtitle">Consolidado de creditos do extrato, titulos pagos no dia e carteira pendente ate a data de corte.</p>
+          <p class="subtitle">Consolidado de creditos do extrato, titulos pagos no periodo e carteira pendente ate a data final selecionada.</p>
         </div>
         <div class="meta-box">
-          <p><strong>Data de referencia:</strong> ${escapeHtml(formatDateBR(payload.dataReferencia))}</p>
+          <p><strong>Data do extrato:</strong> ${escapeHtml(formatDateBR(payload.dataReferencia))}</p>
+          <p><strong>Periodo dos titulos:</strong> ${escapeHtml(formatDateRangeBR(payload.periodoTitulosInicio, payload.periodoTitulosFim))}</p>
           <p><strong>Gerado em:</strong> ${escapeHtml(generatedAtLabel)}</p>
           <p class="mono">ref: ${escapeHtml(payload.dataReferencia)}</p>
         </div>
@@ -432,11 +433,11 @@ export function renderDailyFinanceReportHtml(payload: DailyFinanceReportData): s
         <p class="value">${escapeHtml(formatCurrencyBRL(payload.totalCreditosExtrato))}</p>
       </article>
       <article class="kpi">
-        <p class="label">Titulos pagos no dia</p>
+        <p class="label">Titulos pagos no periodo</p>
         <p class="value">${escapeHtml(formatCurrencyBRL(payload.totalTitulosPagosNoDia))}</p>
       </article>
       <article class="kpi">
-        <p class="label">Pendentes ate hoje</p>
+        <p class="label">Pendentes ate a data final</p>
         <p class="value">${escapeHtml(formatCurrencyBRL(payload.totalTitulosPendentesAteHoje))}</p>
       </article>
       <article class="kpi">
@@ -469,7 +470,7 @@ export function renderDailyFinanceReportHtml(payload: DailyFinanceReportData): s
 
     <section class="section">
       <div class="section-header">
-        <h2>Titulos pagos no dia</h2>
+        <h2>Titulos pagos no periodo</h2>
         <span>${payload.titulosPagosNoDia.length} registros</span>
       </div>
       <table>
@@ -496,7 +497,7 @@ export function renderDailyFinanceReportHtml(payload: DailyFinanceReportData): s
 
     <section class="section">
       <div class="section-header">
-        <h2>Titulos pendentes ate a data de referencia</h2>
+        <h2>Titulos pendentes ate a data final</h2>
         <span>${payload.titulosPendentesAteHoje.length} registros</span>
       </div>
       <table>

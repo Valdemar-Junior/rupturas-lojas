@@ -61,6 +61,8 @@ export interface TituloPendenteView {
 
 export interface DailyFinanceReportData {
   dataReferencia: string
+  periodoTitulosInicio: string
+  periodoTitulosFim: string
   contaSelecionada: string | null
   availableContas: string[]
   geradoEmIso: string
@@ -133,6 +135,14 @@ export function formatDateBR(value: string | null | undefined): string {
     month: '2-digit',
     year: 'numeric'
   }).format(parsed)
+}
+
+export function formatDateRangeBR(start: string | null | undefined, end: string | null | undefined): string {
+  if (!start && !end) return '--'
+  const startLabel = formatDateBR(start)
+  const endLabel = formatDateBR(end)
+  if (start && end && start === end) return startLabel
+  return `${startLabel} a ${endLabel}`
 }
 
 export function normalizeText(value: string | null | undefined, fallback = '--'): string {

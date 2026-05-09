@@ -9,7 +9,6 @@ import type {
 } from './report-types'
 import {
   getDateInFortaleza,
-  isSameDateInLocal,
   normalizeText,
   parseDate,
   toNumber
@@ -127,6 +126,8 @@ function isMissingTableError(error: unknown): boolean {
 
 export interface BuildDailyFinanceReportDataOptions {
   dataReferencia?: string
+  periodoTitulosInicio?: string
+  periodoTitulosFim?: string
   contaCaixaBanco?: string
   agruparPagosPorFornecedor?: boolean
 }
@@ -170,18 +171,30 @@ function aggregatePaidTitlesBySupplier(rows: TituloPagoView[]): TituloPagoView[]
 
 export async function buildDailyFinanceReportData(options: BuildDailyFinanceReportDataOptions = {}): Promise<DailyFinanceReportData> {
   const dataReferencia = sanitizeDateInput(options.dataReferencia)
+  const periodoTitulosInicio = sanitizeDateInput(options.periodoTitulosInicio || options.dataReferencia)
+  const periodoTitulosFim = sanitizeDateInput(options.periodoTitulosFim || options.dataReferencia)
   const contaSelecionada = sanitizeContaInput(options.contaCaixaBanco)
   const agruparPagosPorFornecedor = !!options.agruparPagosPorFornecedor
   const referenceDate = parseDate(dataReferencia)
+  const periodStartDate = parseDate(periodoTitulosInicio)
+  const periodEndDate = parseDate(periodoTitulosFim)
 
-  if (!referenceDate) {
+  if (!referenceDate || !periodStartDate || !periodEndDate) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'Data de referencia invalida.'
+      statusMessage: 'Datas informadas sao invalidas.'
     })
   }
 
-  const referenceDateEnd = endOfDay(referenceDate)
+  if (periodStartDate.getTime() > periodEndDate.getTime()) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'A data inicial do periodo nao pode ser maior que a data final.'
+    })
+  }
+
+  const periodStartTime = periodStartDate.getTime()
+  const periodEndTime = endOfDay(periodEndDate).getTime()
   const avisos: string[] = []
   const supabase = getFinanceiroSupabaseServiceClient()
 
@@ -263,7 +276,8 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
       if (row.valorPago <= 0) return false
       const dataBaixa = parseDate(row.dataBaixa)
       if (!dataBaixa) return false
-      return isSameDateInLocal(dataBaixa, referenceDate)
+      const time = dataBaixa.getTime()
+      return time >= periodStartTime && time <= periodEndTime
     })
     .sort((a, b) => b.valorPago - a.valorPago)
 
@@ -277,7 +291,7 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
       if (row.valorPendente <= 0) return false
       const dataVencimento = parseDate(row.dataVencimento)
       if (!dataVencimento) return true
-      return dataVencimento.getTime() <= referenceDateEnd.getTime()
+      return dataVencimento.getTime() <= periodEndTime
     })
     .sort((a, b) => b.valorPendente - a.valorPendente)
 
@@ -301,13 +315,15 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
   if (titulosPagosNoDia.length === 0) {
     avisos.push(
       contaSelecionada
-        ? `Nenhum titulo pago encontrado para a data de referencia na conta ${contaSelecionada}.`
-        : 'Nenhum titulo pago encontrado para a data de referencia.'
+        ? `Nenhum titulo pago encontrado no periodo informado para a conta ${contaSelecionada}.`
+        : 'Nenhum titulo pago encontrado no periodo informado.'
     )
   }
 
   return {
     dataReferencia,
+    periodoTitulosInicio,
+    periodoTitulosFim,
     contaSelecionada: contaSelecionada || null,
     availableContas,
     geradoEmIso: new Date().toISOString(),

@@ -14,11 +14,15 @@ function parseBoolean(value: unknown, fallback = false): boolean {
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const dataReferencia = typeof query.data === 'string' ? query.data : undefined
+  const periodoTitulosInicio = typeof query.data_inicio === 'string' ? query.data_inicio : undefined
+  const periodoTitulosFim = typeof query.data_fim === 'string' ? query.data_fim : undefined
   const contaCaixaBanco = typeof query.conta === 'string' ? query.conta : undefined
   const agruparPagosPorFornecedor = parseBoolean(query.agrupar_fornecedor, false)
 
   const data = await buildDailyFinanceReportData({
     dataReferencia,
+    periodoTitulosInicio,
+    periodoTitulosFim,
     contaCaixaBanco,
     agruparPagosPorFornecedor
   })
