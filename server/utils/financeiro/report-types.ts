@@ -39,6 +39,7 @@ export interface CreditoExtratoView {
 }
 
 export interface TituloPagoView {
+  id: number
   numeroTitulo: string
   parcela: string
   fornecedor: string
@@ -52,6 +53,7 @@ export interface TituloPagoView {
 }
 
 export interface TituloPendenteView {
+  id: number
   numeroTitulo: string
   fornecedor: string
   situacao: string

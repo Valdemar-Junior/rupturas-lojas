@@ -89,6 +89,7 @@ function mapTituloPago(row: TituloFinanceiroResumo): TituloPagoView {
   const historico = row.historico?.trim() || row.origem_lancamento?.trim() || '--'
 
   return {
+    id: row.id,
     numeroTitulo: normalizeText(row.numero_titulo),
     parcela: normalizeText(row.sufixo === null || row.sufixo === undefined ? null : String(row.sufixo)),
     fornecedor: normalizeText(row.fornecedor),
@@ -104,6 +105,7 @@ function mapTituloPago(row: TituloFinanceiroResumo): TituloPagoView {
 
 function mapTituloPendente(row: TituloFinanceiroResumo): TituloPendenteView {
   return {
+    id: row.id,
     numeroTitulo: normalizeText(row.numero_titulo),
     fornecedor: normalizeText(row.fornecedor),
     situacao: normalizeText(row.situacao_titulo, 'Pendente'),

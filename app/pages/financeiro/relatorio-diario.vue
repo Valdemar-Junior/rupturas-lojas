@@ -283,7 +283,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-200">
-            <tr v-for="item in report?.titulosPagosNoDia || []" :key="`${item.numeroTitulo}-${item.parcela}-${item.valorPago}-${item.dataBaixa}`">
+            <tr v-for="item in report?.titulosPagosNoDia || []" :key="item.id">
               <td class="px-3 py-2">{{ item.numeroTitulo }}</td>
               <td class="px-3 py-2">{{ item.parcela }}</td>
               <td class="px-3 py-2">{{ item.fornecedor }}</td>
@@ -320,7 +320,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-200">
-            <tr v-for="item in report?.titulosPendentesAteHoje || []" :key="`${item.numeroTitulo}-${item.valorPendente}-${item.dataVencimento}`">
+            <tr v-for="item in report?.titulosPendentesAteHoje || []" :key="item.id">
               <td class="px-3 py-2">{{ item.numeroTitulo }}</td>
               <td class="px-3 py-2">{{ item.fornecedor }}</td>
               <td class="px-3 py-2">{{ item.situacao }}</td>
@@ -350,6 +350,7 @@ type Credito = {
 }
 
 type TituloPago = {
+  id: number
   numeroTitulo: string
   parcela: string
   fornecedor: string
@@ -363,6 +364,7 @@ type TituloPago = {
 }
 
 type TituloPendente = {
+  id: number
   numeroTitulo: string
   fornecedor: string
   situacao: string
@@ -405,6 +407,7 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const emailManualSendPending = ref(false)
 const emailMessage = ref('')
 const emailError = ref('')
+let reportRequestId = 0
 
 const flowSteps = [
   {
@@ -530,6 +533,7 @@ async function loadReport() {
 
   pending.value = true
   errorMessage.value = ''
+  const currentRequestId = ++reportRequestId
 
   try {
     const response = await $fetch<{ success: boolean; data: ReportPayload }>('/api/financeiro/relatorio/dados', {
@@ -542,16 +546,22 @@ async function loadReport() {
       }
     })
 
+    if (currentRequestId !== reportRequestId) return
     report.value = response.data
   } catch (error: any) {
+    if (currentRequestId !== reportRequestId) return
     console.error(error)
     report.value = null
     errorMessage.value = error?.data?.statusMessage || error?.message || 'Falha ao carregar dados do relatorio diario.'
   } finally {
-    pending.value = false
+    if (currentRequestId === reportRequestId) {
+      pending.value = false
+    }
   }
 
-  await loadPersistedExtrato()
+  if (currentRequestId === reportRequestId) {
+    await loadPersistedExtrato()
+  }
 }
 
 function buildReportQuery() {
