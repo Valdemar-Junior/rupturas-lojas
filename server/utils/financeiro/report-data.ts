@@ -52,7 +52,12 @@ function endOfDay(date: Date): Date {
 }
 
 function normalizeAccountKey(value: string | null | undefined): string {
-  return normalizeText(value, '').trim().toLowerCase()
+  return normalizeText(value, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
 }
 
 function isBancoAccountType(value: string | null | undefined): boolean {
@@ -61,6 +66,11 @@ function isBancoAccountType(value: string | null | undefined): boolean {
 
 function resolveContaCaixaBanco(row: TituloFinanceiroResumo): string {
   return row.conta_caixa?.trim() || row.tipo_conta?.trim() || '--'
+}
+
+function matchesContaSelecionada(selectedKey: string, ...candidates: Array<string | null | undefined>): boolean {
+  if (!selectedKey) return true
+  return candidates.some((candidate) => normalizeAccountKey(candidate) === selectedKey)
 }
 
 function mapCreditoExtrato(row: ExtratoCreditoDiario): CreditoExtratoView {
@@ -263,11 +273,11 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
   ).sort((a, b) => a.localeCompare(b, 'pt-BR'))
 
   const filteredExtratoRows = contaSelecionadaKey
-    ? extratoRows.filter((row) => normalizeAccountKey(row.banco) === contaSelecionadaKey)
+    ? extratoRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.banco))
     : extratoRows
 
   const filteredTitulosRows = contaSelecionadaKey
-    ? titulosRows.filter((row) => normalizeAccountKey(resolveContaCaixaBanco(row)) === contaSelecionadaKey)
+    ? titulosRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.conta_caixa, resolveContaCaixaBanco(row)))
     : titulosRows
 
   const titulosPagosBase = filteredTitulosRows
