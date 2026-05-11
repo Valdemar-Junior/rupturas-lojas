@@ -523,10 +523,6 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     )
   }
 
-  if (transferenciasNoPeriodo.length === 0 && contaSelecionada) {
-    avisos.push(`Nenhuma transferencia entre contas encontrada no periodo informado para a conta ${contaSelecionada}.`)
-  }
-
   return {
     dataReferencia,
     periodoTitulosInicio,

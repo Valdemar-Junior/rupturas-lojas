@@ -501,15 +501,15 @@ export function renderDailyFinanceReportHtml(payload: DailyFinanceReportData): s
         <thead>
           <tr>
             <th style="width: 5%">#</th>
-            <th style="width: 11%">Titulo</th>
-            <th style="width: 7%">Parcela</th>
-            <th style="width: 16%">Fornecedor</th>
-            <th style="width: 14%">Historico</th>
-            <th style="width: 13%">Complemento</th>
-            <th style="width: 12%">Conta caixa/banco</th>
-            <th style="width: 8%">Forma pgto</th>
-            <th style="width: 8%">Data baixa</th>
-            <th style="width: 6%; text-align: right;">Valor pago</th>
+            <th style="width: 10%">Titulo</th>
+            <th style="width: 6%">Parcela</th>
+            <th style="width: 15%">Fornecedor</th>
+            <th style="width: 13%">Historico</th>
+            <th style="width: 12%">Complemento</th>
+            <th style="width: 11%">Conta caixa/banco</th>
+            <th style="width: 12%">Forma pgto</th>
+            <th style="width: 7%">Data baixa</th>
+            <th style="width: 9%; text-align: right;">Valor pago</th>
           </tr>
         </thead>
         <tbody>
