@@ -324,18 +324,18 @@ function buildEmailBody(data: DailyFinanceReportData): string {
   <div style="font-family:Segoe UI,Tahoma,sans-serif;color:#0f172a;line-height:1.45;">
     <p>Segue o movimento do ${contaLabel}.</p>
     <p>
-      Data do extrato: ${formatDateBR(data.dataReferencia)}<br>
-      Periodo dos titulos: ${formatDateRangeBR(data.periodoTitulosInicio, data.periodoTitulosFim)}<br>
-      Conta: ${contaLabel}<br>
-      Creditos do extrato: ${formatCurrencyBRL(data.totalCreditosExtrato)}<br>
-      Titulos pagos no periodo: ${formatCurrencyBRL(data.totalTitulosPagosNoDia)}<br>
-      Transferencias entre contas: ${formatCurrencyBRL(data.totalTransferenciasNoPeriodo)}<br>
-      Pendentes ate a data final: ${formatCurrencyBRL(data.totalTitulosPendentesAteHoje)}<br>
-      Saldo do dia: ${formatCurrencyBRL(data.saldoDoDia)}
+      <strong>Data do extrato:</strong> ${formatDateBR(data.dataReferencia)}<br>
+      <strong>Periodo dos titulos:</strong> ${formatDateRangeBR(data.periodoTitulosInicio, data.periodoTitulosFim)}<br>
+      <strong>Conta:</strong> ${contaLabel}<br>
+      <strong>Creditos do extrato:</strong> ${formatCurrencyBRL(data.totalCreditosExtrato)}<br>
+      <strong>Titulos pagos no periodo:</strong> ${formatCurrencyBRL(data.totalTitulosPagosNoDia)}<br>
+      <strong>Transferencias entre contas:</strong> ${formatCurrencyBRL(data.totalTransferenciasNoPeriodo)}<br>
+      <strong>Pendentes ate a data final:</strong> ${formatCurrencyBRL(data.totalTitulosPendentesAteHoje)}<br>
+      <strong>Saldo do dia:</strong> ${formatCurrencyBRL(data.saldoDoDia)}
     </p>
     <p>Os anexos incluem o PDF detalhado do relatório e o PDF original do extrato bancário.</p>
     <p>Qualquer dúvida, estou à disposição.</p>
-    <p>Atenciosamente,<br>Maria Luiza Rodrigues</p>
+    <p><strong>Atenciosamente,</strong></p>
   </div>`
 }
 
