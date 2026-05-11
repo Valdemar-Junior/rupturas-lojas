@@ -333,9 +333,9 @@ function buildEmailBody(data: DailyFinanceReportData): string {
       <strong>Pendentes ate a data final:</strong> ${formatCurrencyBRL(data.totalTitulosPendentesAteHoje)}<br>
       <strong>Saldo do dia:</strong> ${formatCurrencyBRL(data.saldoDoDia)}
     </p>
-    <p>Os anexos incluem o PDF detalhado do relatório e o PDF original do extrato bancário.</p>
+    <p>Os anexos incluem o PDF detalhado do relatório e o PDF do extrato bancário.</p>
     <p>Qualquer dúvida, estou à disposição.</p>
-    <p><strong>Atenciosamente,</strong></p>
+    <p><strong>Atenciosamente,</strong><br>Maria Luiza Rodrigues</p>
   </div>`
 }
 
@@ -401,3 +401,4 @@ export async function sendFinanceSmtpTestEmail(
     html: buildTestBody(dataReferencia)
   })
 }
+
