@@ -379,7 +379,6 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
           ...row,
           data_movimento: periodoTitulosInicio
         }))
-        avisos.push(`Transferencias localizadas com data invertida (${periodoTitulosInicio} x ${swappedDate}). Revise o fluxo n8n para corrigir dia e mes.`)
       }
     }
   }
@@ -460,10 +459,6 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
 
       if (swappedFilteredRows.length > 0) {
         effectiveTransferenciasRows = swappedFilteredRows
-        const warning = `Transferencias localizadas com data invertida (${periodoTitulosInicio} x ${swappedDate}). Revise o fluxo n8n para corrigir dia e mes.`
-        if (!avisos.includes(warning)) {
-          avisos.push(warning)
-        }
       }
     }
   }
