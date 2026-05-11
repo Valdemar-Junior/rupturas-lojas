@@ -30,6 +30,16 @@ export interface TituloFinanceiroResumo {
   usuario_login: string | null
 }
 
+export interface TransferenciaBancariaResumo {
+  id: number
+  data_movimento: string
+  conta_origem: string
+  conta_destino: string
+  valor_transacao: number | string | null
+  observacao: string | null
+  created_at: string | null
+}
+
 export interface CreditoExtratoView {
   dataMovimento: string | null
   descricao: string
@@ -39,7 +49,7 @@ export interface CreditoExtratoView {
 }
 
 export interface TituloPagoView {
-  id: number
+  id: number | string
   numeroTitulo: string
   parcela: string
   fornecedor: string
@@ -50,6 +60,17 @@ export interface TituloPagoView {
   contaCaixaBanco: string
   dataBaixa: string | null
   valorPago: number
+  tipoLancamento?: 'titulo' | 'transferencia'
+}
+
+export interface TransferenciaSaidaView {
+  id: number | string
+  descricao: string
+  contaOrigem: string
+  contaDestino: string
+  observacao: string
+  dataMovimento: string | null
+  valorTransferencia: number
 }
 
 export interface TituloPendenteView {
@@ -70,9 +91,11 @@ export interface DailyFinanceReportData {
   geradoEmIso: string
   creditosExtrato: CreditoExtratoView[]
   titulosPagosNoDia: TituloPagoView[]
+  transferenciasNoPeriodo: TransferenciaSaidaView[]
   titulosPendentesAteHoje: TituloPendenteView[]
   totalCreditosExtrato: number
   totalTitulosPagosNoDia: number
+  totalTransferenciasNoPeriodo: number
   totalTitulosPendentesAteHoje: number
   saldoDoDia: number
   avisos: string[]

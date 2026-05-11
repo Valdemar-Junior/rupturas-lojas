@@ -1,6 +1,7 @@
 import type {
   CreditoExtratoView,
   DailyFinanceReportData,
+  TransferenciaSaidaView,
   TituloPagoView,
   TituloPendenteView
 } from './report-types'
@@ -67,6 +68,26 @@ function renderTitulosPagosRows(rows: TituloPagoView[]): string {
     },
     'Nenhum titulo pago no dia de referencia.',
     10
+  )
+}
+
+function renderTransferenciasRows(rows: TransferenciaSaidaView[]): string {
+  return renderTableRows(
+    rows,
+    (row, index) => {
+      return `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(formatDateBR(row.dataMovimento))}</td>
+        <td>${escapeHtml(row.descricao)}</td>
+        <td>${escapeHtml(row.contaOrigem)}</td>
+        <td>${escapeHtml(row.contaDestino)}</td>
+        <td>${escapeHtml(row.observacao)}</td>
+        <td class="value-negative">${escapeHtml(formatCurrencyBRL(row.valorTransferencia))}</td>
+      </tr>`
+    },
+    'Nenhuma transferencia entre contas encontrada no periodo.',
+    7
   )
 }
 
@@ -239,7 +260,7 @@ export function renderDailyFinanceReportHtml(payload: DailyFinanceReportData): s
     .kpi-grid {
       margin-top: 14px;
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 10px;
     }
 
@@ -436,6 +457,10 @@ export function renderDailyFinanceReportHtml(payload: DailyFinanceReportData): s
         <p class="value">${escapeHtml(formatCurrencyBRL(payload.totalTitulosPagosNoDia))}</p>
       </article>
       <article class="kpi">
+        <p class="label">Transferencias entre contas</p>
+        <p class="value">${escapeHtml(formatCurrencyBRL(payload.totalTransferenciasNoPeriodo))}</p>
+      </article>
+      <article class="kpi">
         <p class="label">Pendentes ate a data final</p>
         <p class="value">${escapeHtml(formatCurrencyBRL(payload.totalTitulosPendentesAteHoje))}</p>
       </article>
@@ -489,6 +514,29 @@ export function renderDailyFinanceReportHtml(payload: DailyFinanceReportData): s
         </thead>
         <tbody>
           ${renderTitulosPagosRows(payload.titulosPagosNoDia)}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <div class="section-header">
+        <h2>Transferencias entre contas</h2>
+        <span>${payload.transferenciasNoPeriodo.length} registros</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 5%">#</th>
+            <th style="width: 12%">Data</th>
+            <th style="width: 20%">Descricao</th>
+            <th style="width: 18%">Conta origem</th>
+            <th style="width: 18%">Conta destino</th>
+            <th style="width: 17%">Observacao</th>
+            <th style="width: 10%; text-align: right;">Valor</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${renderTransferenciasRows(payload.transferenciasNoPeriodo)}
         </tbody>
       </table>
     </section>

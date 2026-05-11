@@ -3,6 +3,8 @@ import type {
   CreditoExtratoView,
   DailyFinanceReportData,
   ExtratoCreditoDiario,
+  TransferenciaSaidaView,
+  TransferenciaBancariaResumo,
   TituloFinanceiroResumo,
   TituloPagoView,
   TituloPendenteView
@@ -17,10 +19,15 @@ import { getFinanceiroSupabaseServiceClient } from './supabase-service'
 
 const DEFAULT_EXTRATO_TABLE = 'extrato_creditos_diarios'
 const DEFAULT_TITULOS_TABLE = 'titulos_financeiros'
+const DEFAULT_TRANSFERENCIAS_TABLE = 'transferencias_bancarias'
 
-function getConfiguredTable(name: 'extrato' | 'titulos'): string {
+function getConfiguredTable(name: 'extrato' | 'titulos' | 'transferencias'): string {
   if (name === 'extrato') {
     return process.env.RELATORIO_EXTRATO_TABLE?.trim() || DEFAULT_EXTRATO_TABLE
+  }
+
+  if (name === 'transferencias') {
+    return process.env.RELATORIO_TRANSFERENCIAS_TABLE?.trim() || DEFAULT_TRANSFERENCIAS_TABLE
   }
 
   return process.env.RELATORIO_TITULOS_TABLE?.trim() || DEFAULT_TITULOS_TABLE
@@ -45,6 +52,17 @@ function sanitizeContaInput(value: unknown): string | undefined {
   return raw || undefined
 }
 
+function invertIsoDayMonth(value: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return null
+  const [, year, month, day] = match
+  if (month === day) return null
+  const monthNum = Number(month)
+  const dayNum = Number(day)
+  if (monthNum < 1 || monthNum > 12 || dayNum < 1 || dayNum > 12) return null
+  return `${year}-${day}-${month}`
+}
+
 function endOfDay(date: Date): Date {
   const copy = new Date(date)
   copy.setHours(23, 59, 59, 999)
@@ -55,6 +73,8 @@ function normalizeAccountKey(value: string | null | undefined): string {
   return normalizeText(value, '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\bbanco\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase()
@@ -70,7 +90,30 @@ function resolveContaCaixaBanco(row: TituloFinanceiroResumo): string {
 
 function matchesContaSelecionada(selectedKey: string, ...candidates: Array<string | null | undefined>): boolean {
   if (!selectedKey) return true
-  return candidates.some((candidate) => normalizeAccountKey(candidate) === selectedKey)
+  return candidates.some((candidate) => {
+    const candidateKey = normalizeAccountKey(candidate)
+    if (!candidateKey) return false
+    return candidateKey === selectedKey || candidateKey.includes(selectedKey) || selectedKey.includes(candidateKey)
+  })
+}
+
+function buildAvailableContas(...groups: Array<Array<string | null | undefined>>): string[] {
+  const entries = new Map<string, string>()
+
+  for (const group of groups) {
+    for (const value of group) {
+      const label = String(value || '').trim().replace(/\s+/g, ' ')
+      const key = normalizeAccountKey(label)
+      if (!key || label === '--' || key === 'conta principal') continue
+
+      const current = entries.get(key)
+      if (!current || label.length > current.length) {
+        entries.set(key, label)
+      }
+    }
+  }
+
+  return Array.from(entries.values()).sort((a, b) => a.localeCompare(b, 'pt-BR'))
 }
 
 function mapCreditoExtrato(row: ExtratoCreditoDiario): CreditoExtratoView {
@@ -99,7 +142,24 @@ function mapTituloPago(row: TituloFinanceiroResumo): TituloPagoView {
     formaPagamento: normalizeText(row.forma_pagamento),
     contaCaixaBanco,
     dataBaixa: row.data_baixa || row.data_ultimo_pagamento,
-    valorPago
+    valorPago,
+    tipoLancamento: 'titulo'
+  }
+}
+
+function mapTransferenciaSaida(row: TransferenciaBancariaResumo): TransferenciaSaidaView {
+  const origem = normalizeText(row.conta_origem)
+  const destino = normalizeText(row.conta_destino)
+  const observacao = row.observacao?.trim()
+
+  return {
+    id: `transferencia-${row.id}`,
+    descricao: 'Transferencia entre contas',
+    contaOrigem: origem,
+    contaDestino: destino,
+    observacao: observacao || '--',
+    dataMovimento: row.data_movimento,
+    valorTransferencia: toNumber(row.valor_transacao)
   }
 }
 
@@ -152,6 +212,7 @@ function aggregatePaidTitlesBySupplier(rows: TituloPagoView[]): TituloPagoView[]
     const existing = grouped.get(key)
     if (!existing) {
       grouped.set(key, {
+        id: row.id,
         numeroTitulo: 'Agrupado',
         parcela: 'Total',
         fornecedor: row.fornecedor,
@@ -161,7 +222,8 @@ function aggregatePaidTitlesBySupplier(rows: TituloPagoView[]): TituloPagoView[]
         formaPagamento: row.formaPagamento,
         contaCaixaBanco: row.contaCaixaBanco,
         dataBaixa: row.dataBaixa,
-        valorPago: row.valorPago
+        valorPago: row.valorPago,
+        tipoLancamento: 'titulo'
       })
       continue
     }
@@ -212,8 +274,37 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
 
   const extratoTable = getConfiguredTable('extrato')
   const titulosTable = getConfiguredTable('titulos')
+  const transferenciasTable = getConfiguredTable('transferencias')
+  const loadTransferenciasByExactDate = async (dateValue: string): Promise<TransferenciaBancariaResumo[]> => {
+    const {
+      data,
+      error
+    } = await supabase
+      .from(transferenciasTable)
+      .select('id,data_movimento,conta_origem,conta_destino,valor_transacao,observacao,created_at')
+      .eq('data_movimento', dateValue)
+      .order('data_movimento', { ascending: true })
+      .order('id', { ascending: true })
+
+    if (error) {
+      if (isMissingTableError(error)) {
+        avisos.push(`Tabela "${transferenciasTable}" nao encontrada. Transferencias entre caixas nao serao consideradas no saldo.`)
+        return []
+      }
+
+      throw createError({
+        statusCode: 500,
+        statusMessage: mapSupabaseError(error, 'Erro ao consultar transferencias bancarias.')
+      })
+    }
+
+    return (data as TransferenciaBancariaResumo[]) || []
+  }
 
   let extratoRows: ExtratoCreditoDiario[] = []
+  let transferenciasRows: TransferenciaBancariaResumo[] = []
+  let extratoContaRows: Array<{ banco: string | null }> = []
+  let transferenciasContaRows: Array<{ conta_origem: string | null; conta_destino: string | null }> = []
 
   const {
     data: extratoData,
@@ -236,6 +327,73 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     }
   } else {
     extratoRows = (extratoData as ExtratoCreditoDiario[]) || []
+  }
+
+  const {
+    data: extratoContaData,
+    error: extratoContaError
+  } = await supabase
+    .from(extratoTable)
+    .select('banco')
+    .limit(10000)
+
+  if (!extratoContaError) {
+    extratoContaRows = (extratoContaData as Array<{ banco: string | null }>) || []
+  }
+
+  if (periodoTitulosInicio === periodoTitulosFim) {
+    transferenciasRows = await loadTransferenciasByExactDate(periodoTitulosInicio)
+  } else {
+    const {
+      data: transferenciasData,
+      error: transferenciasError
+    } = await supabase
+      .from(transferenciasTable)
+      .select('id,data_movimento,conta_origem,conta_destino,valor_transacao,observacao,created_at')
+      .gte('data_movimento', periodoTitulosInicio)
+      .lte('data_movimento', periodoTitulosFim)
+      .order('data_movimento', { ascending: true })
+      .order('id', { ascending: true })
+
+    if (transferenciasError) {
+      if (isMissingTableError(transferenciasError)) {
+        avisos.push(`Tabela "${transferenciasTable}" nao encontrada. Transferencias entre caixas nao serao consideradas no saldo.`)
+      } else {
+        throw createError({
+          statusCode: 500,
+          statusMessage: mapSupabaseError(transferenciasError, 'Erro ao consultar transferencias bancarias.')
+        })
+      }
+    } else {
+      transferenciasRows = (transferenciasData as TransferenciaBancariaResumo[]) || []
+    }
+  }
+
+  if (transferenciasRows.length === 0 && periodoTitulosInicio === periodoTitulosFim) {
+    const swappedDate = invertIsoDayMonth(periodoTitulosInicio)
+
+    if (swappedDate) {
+      const swappedRows = await loadTransferenciasByExactDate(swappedDate)
+      if (swappedRows.length > 0) {
+        transferenciasRows = swappedRows.map((row) => ({
+          ...row,
+          data_movimento: periodoTitulosInicio
+        }))
+        avisos.push(`Transferencias localizadas com data invertida (${periodoTitulosInicio} x ${swappedDate}). Revise o fluxo n8n para corrigir dia e mes.`)
+      }
+    }
+  }
+
+  const {
+    data: transferenciasContaData,
+    error: transferenciasContaError
+  } = await supabase
+    .from(transferenciasTable)
+    .select('conta_origem,conta_destino')
+    .limit(10000)
+
+  if (!transferenciasContaError) {
+    transferenciasContaRows = (transferenciasContaData as Array<{ conta_origem: string | null; conta_destino: string | null }>) || []
   }
 
   const {
@@ -264,15 +422,14 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
   const titulosRows = (titulosData as TituloFinanceiroResumo[]) || []
   const contaSelecionadaKey = normalizeAccountKey(contaSelecionada)
 
-  const availableContas = Array.from(
-    new Set(
-      titulosRows
-        .filter((row) => isBancoAccountType(row.tipo_conta))
-        .map((row) => resolveContaCaixaBanco(row))
-        .map((value) => value.trim())
-        .filter((value) => value && value !== '--')
-    )
-  ).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  const availableContas = buildAvailableContas(
+    titulosRows
+      .filter((row) => isBancoAccountType(row.tipo_conta))
+      .map((row) => resolveContaCaixaBanco(row)),
+    extratoContaRows.map((row) => row.banco || ''),
+    transferenciasContaRows.map((row) => row.conta_origem || ''),
+    contaSelecionada ? [contaSelecionada] : []
+  )
 
   const filteredExtratoRows = contaSelecionadaKey
     ? extratoRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.banco))
@@ -281,6 +438,35 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
   const filteredTitulosRows = contaSelecionadaKey
     ? titulosRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.conta_caixa, resolveContaCaixaBanco(row)))
     : titulosRows
+
+  const filteredTransferenciasRows = contaSelecionadaKey
+    ? transferenciasRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.conta_origem))
+    : transferenciasRows
+
+  let effectiveTransferenciasRows = filteredTransferenciasRows
+
+  if (effectiveTransferenciasRows.length === 0 && periodoTitulosInicio === periodoTitulosFim) {
+    const swappedDate = invertIsoDayMonth(periodoTitulosInicio)
+
+    if (swappedDate) {
+      const swappedRows = await loadTransferenciasByExactDate(swappedDate)
+      const swappedFilteredRows = (contaSelecionadaKey
+        ? swappedRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.conta_origem))
+        : swappedRows)
+        .map((row) => ({
+          ...row,
+          data_movimento: periodoTitulosInicio
+        }))
+
+      if (swappedFilteredRows.length > 0) {
+        effectiveTransferenciasRows = swappedFilteredRows
+        const warning = `Transferencias localizadas com data invertida (${periodoTitulosInicio} x ${swappedDate}). Revise o fluxo n8n para corrigir dia e mes.`
+        if (!avisos.includes(warning)) {
+          avisos.push(warning)
+        }
+      }
+    }
+  }
 
   const titulosPagosBase = filteredTitulosRows
     .map(mapTituloPago)
@@ -291,11 +477,20 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
       const time = dataBaixa.getTime()
       return time >= periodStartTime && time <= periodEndTime
     })
-    .sort((a, b) => b.valorPago - a.valorPago)
+  const transferenciasNoPeriodo = effectiveTransferenciasRows
+    .map(mapTransferenciaSaida)
+    .filter((row) => {
+      if (row.valorTransferencia <= 0) return false
+      const dataMovimento = parseDate(row.dataMovimento)
+      if (!dataMovimento) return false
+      const time = dataMovimento.getTime()
+      return time >= periodStartTime && time <= periodEndTime
+    })
+    .sort((a, b) => b.valorTransferencia - a.valorTransferencia)
 
   const titulosPagosNoDia = agruparPagosPorFornecedor
     ? aggregatePaidTitlesBySupplier(titulosPagosBase)
-    : titulosPagosBase
+    : titulosPagosBase.sort((a, b) => b.valorPago - a.valorPago)
 
   const titulosPendentesAteHoje = filteredTitulosRows
     .map(mapTituloPendente)
@@ -313,8 +508,9 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
 
   const totalCreditosExtrato = creditosExtrato.reduce((sum, row) => sum + row.valor, 0)
   const totalTitulosPagosNoDia = titulosPagosNoDia.reduce((sum, row) => sum + row.valorPago, 0)
+  const totalTransferenciasNoPeriodo = transferenciasNoPeriodo.reduce((sum, row) => sum + row.valorTransferencia, 0)
   const totalTitulosPendentesAteHoje = titulosPendentesAteHoje.reduce((sum, row) => sum + row.valorPendente, 0)
-  const saldoDoDia = totalCreditosExtrato - totalTitulosPagosNoDia
+  const saldoDoDia = totalCreditosExtrato - totalTitulosPagosNoDia - totalTransferenciasNoPeriodo
 
   if (creditosExtrato.length === 0) {
     avisos.push(
@@ -332,6 +528,10 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     )
   }
 
+  if (transferenciasNoPeriodo.length === 0 && contaSelecionada) {
+    avisos.push(`Nenhuma transferencia entre contas encontrada no periodo informado para a conta ${contaSelecionada}.`)
+  }
+
   return {
     dataReferencia,
     periodoTitulosInicio,
@@ -341,9 +541,11 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     geradoEmIso: new Date().toISOString(),
     creditosExtrato,
     titulosPagosNoDia,
+    transferenciasNoPeriodo,
     titulosPendentesAteHoje,
     totalCreditosExtrato,
     totalTitulosPagosNoDia,
+    totalTransferenciasNoPeriodo,
     totalTitulosPendentesAteHoje,
     saldoDoDia,
     avisos

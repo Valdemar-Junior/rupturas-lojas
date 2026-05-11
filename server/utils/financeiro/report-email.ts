@@ -329,6 +329,7 @@ function buildEmailBody(data: DailyFinanceReportData): string {
       Conta: ${contaLabel}<br>
       Creditos do extrato: ${formatCurrencyBRL(data.totalCreditosExtrato)}<br>
       Titulos pagos no periodo: ${formatCurrencyBRL(data.totalTitulosPagosNoDia)}<br>
+      Transferencias entre contas: ${formatCurrencyBRL(data.totalTransferenciasNoPeriodo)}<br>
       Pendentes ate a data final: ${formatCurrencyBRL(data.totalTitulosPendentesAteHoje)}<br>
       Saldo do dia: ${formatCurrencyBRL(data.saldoDoDia)}
     </p>

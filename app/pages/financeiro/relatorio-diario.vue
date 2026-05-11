@@ -172,6 +172,10 @@
         <p class="mt-1 text-xl font-bold text-rose-700">{{ formatCurrency(report?.totalTitulosPagosNoDia || 0) }}</p>
       </article>
       <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.6)]">
+        <p class="text-[11px] uppercase tracking-[0.14em] text-slate-500">Transferencias entre contas</p>
+        <p class="mt-1 text-xl font-bold text-rose-700">{{ formatCurrency(report?.totalTransferenciasNoPeriodo || 0) }}</p>
+      </article>
+      <article class="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.6)]">
         <p class="text-[11px] uppercase tracking-[0.14em] text-slate-500">Pendentes ate a data</p>
         <p class="mt-1 text-xl font-bold text-amber-700">{{ formatCurrency(report?.totalTitulosPendentesAteHoje || 0) }}</p>
       </article>
@@ -255,6 +259,40 @@
             </tr>
             <tr v-if="!report || report.creditosExtrato.length === 0">
               <td colspan="5" class="px-3 py-8 text-center text-sm text-slate-500">Nenhum credito encontrado.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="rounded-2xl border border-slate-200 bg-white shadow-[0_18px_42px_-34px_rgba(15,23,42,0.6)]">
+      <header class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+        <h2 class="text-sm font-semibold text-slate-800">Transferencias entre contas</h2>
+        <span class="text-xs font-semibold text-slate-500">{{ report?.transferenciasNoPeriodo.length || 0 }} registros</span>
+      </header>
+      <div class="max-h-[320px] overflow-auto">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+          <thead class="sticky top-0 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
+            <tr>
+              <th class="px-3 py-2">Descricao</th>
+              <th class="px-3 py-2">Conta origem</th>
+              <th class="px-3 py-2">Conta destino</th>
+              <th class="px-3 py-2">Observacao</th>
+              <th class="px-3 py-2">Data</th>
+              <th class="px-3 py-2 text-right">Valor</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200">
+            <tr v-for="item in report?.transferenciasNoPeriodo || []" :key="item.id">
+              <td class="px-3 py-2">{{ item.descricao }}</td>
+              <td class="px-3 py-2">{{ item.contaOrigem }}</td>
+              <td class="px-3 py-2">{{ item.contaDestino }}</td>
+              <td class="px-3 py-2">{{ item.observacao }}</td>
+              <td class="px-3 py-2">{{ formatDate(item.dataMovimento) }}</td>
+              <td class="px-3 py-2 text-right font-semibold text-rose-700">{{ formatCurrency(item.valorTransferencia) }}</td>
+            </tr>
+            <tr v-if="!report || report.transferenciasNoPeriodo.length === 0">
+              <td colspan="6" class="px-3 py-8 text-center text-sm text-slate-500">Nenhuma transferencia entre contas encontrada.</td>
             </tr>
           </tbody>
         </table>
@@ -350,7 +388,7 @@ type Credito = {
 }
 
 type TituloPago = {
-  id: number
+  id: number | string
   numeroTitulo: string
   parcela: string
   fornecedor: string
@@ -361,6 +399,7 @@ type TituloPago = {
   contaCaixaBanco: string
   dataBaixa: string | null
   valorPago: number
+  tipoLancamento?: 'titulo' | 'transferencia'
 }
 
 type TituloPendente = {
@@ -372,6 +411,16 @@ type TituloPendente = {
   valorPendente: number
 }
 
+type Transferencia = {
+  id: number | string
+  descricao: string
+  contaOrigem: string
+  contaDestino: string
+  observacao: string
+  dataMovimento: string | null
+  valorTransferencia: number
+}
+
 type ReportPayload = {
   dataReferencia: string
   periodoTitulosInicio: string
@@ -381,9 +430,11 @@ type ReportPayload = {
   geradoEmIso: string
   creditosExtrato: Credito[]
   titulosPagosNoDia: TituloPago[]
+  transferenciasNoPeriodo: Transferencia[]
   titulosPendentesAteHoje: TituloPendente[]
   totalCreditosExtrato: number
   totalTitulosPagosNoDia: number
+  totalTransferenciasNoPeriodo: number
   totalTitulosPendentesAteHoje: number
   saldoDoDia: number
   avisos: string[]
