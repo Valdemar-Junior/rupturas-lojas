@@ -9,6 +9,7 @@ export interface ProdutoRuptura {
     qtd_total_deposito: number | null;
     saldo_assu: number | null;
     saldo_mossoro: number | null;
+    saldo_mossoro_partage: number | null;
     detalhes_grades_disponiveis: string | null;
 }
 
@@ -24,6 +25,7 @@ export interface ProdutoEstoque {
     saldo_deposito: number | null;
     saldo_assu: number | null;
     saldo_mossoro: number | null;
+    saldo_mossoro_partage: number | null;
     detalhes_grades_em_loja: string | null;
     created_at: string | null;
 }
@@ -31,14 +33,16 @@ export interface ProdutoEstoque {
 export interface DashboardStats {
     ruptura: {
         total: number;
-        ambas: number;
+        todas: number;
         assu: number;
         mossoro: number;
+        mossoroPartage: number;
     };
     rupturaDeposito: {
         total: number;
         assu: number;
         mossoro: number;
+        mossoroPartage: number;
     };
     criticos: number;
 }

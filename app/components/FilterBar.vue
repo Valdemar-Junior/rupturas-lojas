@@ -75,16 +75,18 @@ const localOptions = computed(() => {
   if (props.mode === 'ruptura-loja') {
     return [
       { value: 'todos', label: 'Todas as rupturas' },
-      { value: 'ambas', label: 'Falta em Assu e Mossoro' },
-      { value: 'assu', label: 'Faltando apenas em Assu' },
-      { value: 'mossoro', label: 'Faltando apenas em Mossoro' }
+      { value: 'todas', label: 'Falta em todas as lojas' },
+      { value: 'assu', label: 'Com falta em Assu' },
+      { value: 'mossoro', label: 'Com falta em Mossoro Centro' },
+      { value: 'mossoro_partage', label: 'Com falta em Mossoro Partage' }
     ]
   }
 
   return [
     { value: 'todos', label: 'Todas as rupturas de deposito' },
     { value: 'assu', label: 'Com estoque em Assu' },
-    { value: 'mossoro', label: 'Com estoque em Mossoro' }
+    { value: 'mossoro', label: 'Com estoque em Mossoro Centro' },
+    { value: 'mossoro_partage', label: 'Com estoque em Mossoro Partage' }
   ]
 })
 </script>

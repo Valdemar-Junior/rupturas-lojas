@@ -23,7 +23,8 @@
               Cor/Grade em loja
             </th>
             <th class="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Assu</th>
-            <th class="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Mossoro</th>
+            <th class="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Mossoro Centro</th>
+            <th class="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Mossoro Partage</th>
             <th class="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Deposito</th>
             <th class="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
           </tr>
@@ -65,6 +66,12 @@
             <td class="px-6 py-4 text-center">
               <span :class="saldoClass(produto.saldo_mossoro)">
                 {{ formatNumber(produto.saldo_mossoro) }}
+              </span>
+            </td>
+
+            <td class="px-6 py-4 text-center">
+              <span :class="saldoClass(produto.saldo_mossoro_partage)">
+                {{ formatNumber(produto.saldo_mossoro_partage) }}
               </span>
             </td>
 
@@ -138,11 +145,12 @@ function hasCorGradeValue(produto: ProdutoEstoque) {
 const showCorGradeColumn = computed(() => props.produtos.some(hasCorGradeValue))
 
 function resolveStatus(produto: ProdutoEstoque) {
-  const assu = toNumber(produto.saldo_assu)
-  const mossoro = toNumber(produto.saldo_mossoro)
+  const lojasComSaldo: string[] = []
 
-  if (assu > 0 && mossoro > 0) return 'Assu + Mossoro'
-  if (assu > 0) return 'Assu'
-  return 'Mossoro'
+  if (toNumber(produto.saldo_assu) > 0) lojasComSaldo.push('Assu')
+  if (toNumber(produto.saldo_mossoro) > 0) lojasComSaldo.push('Mossoro Centro')
+  if (toNumber(produto.saldo_mossoro_partage) > 0) lojasComSaldo.push('Mossoro Partage')
+
+  return lojasComSaldo.join(' + ') || '-'
 }
 </script>

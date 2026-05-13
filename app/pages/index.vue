@@ -156,7 +156,7 @@ type DashboardMode = 'ruptura-loja' | 'ruptura-deposito'
 export type RupturaFilter = {
   search: string;
   departamento: string;
-  localFalta: 'todos' | 'ambas' | 'assu' | 'mossoro';
+  localFalta: 'todos' | 'todas' | 'assu' | 'mossoro' | 'mossoro_partage';
 }
 
 type KpiCardData = {
@@ -209,7 +209,7 @@ const activeScenario = computed(() => {
     return {
       title: 'Cenario 1',
       heading: 'Produtos em ruptura na loja',
-      rule: 'Mostra itens com saldo no deposito e falta total ou parcial nas lojas Assu e Mossoro.'
+      rule: 'Mostra itens com saldo no deposito e falta total ou parcial nas lojas Assu, Mossoro Centro e Mossoro Partage.'
     }
   }
 
@@ -265,14 +265,15 @@ const localFilterLabel = computed(() => {
   if (filters.value.localFalta === 'todos') return 'Todos os locais'
 
   if (activeMode.value === 'ruptura-loja') {
-    if (filters.value.localFalta === 'ambas') return 'Falta em Assu e Mossoro'
-    if (filters.value.localFalta === 'assu') return 'Falta apenas em Assu'
-    return 'Falta apenas em Mossoro'
+    if (filters.value.localFalta === 'todas') return 'Falta em todas as lojas'
+    if (filters.value.localFalta === 'assu') return 'Com falta em Assu'
+    if (filters.value.localFalta === 'mossoro') return 'Com falta em Mossoro Centro'
+    return 'Com falta em Mossoro Partage'
   }
 
-  if (filters.value.localFalta === 'ambas') return 'Cobertura em Assu e Mossoro'
   if (filters.value.localFalta === 'assu') return 'Cobertura em Assu'
-  return 'Cobertura em Mossoro'
+  if (filters.value.localFalta === 'mossoro') return 'Cobertura em Mossoro Centro'
+  return 'Cobertura em Mossoro Partage'
 })
 
 const activeFilterSummary = computed(() => {
@@ -307,12 +308,16 @@ function escapeHtml(value: string) {
     .replace(/'/g, '&#39;')
 }
 
-function isAssuOnly(item: ProdutoRuptura | ProdutoEstoque) {
-  return toNumber(item.saldo_assu) > 0 && toNumber(item.saldo_mossoro) <= 0
+function hasAssuSaldo(item: ProdutoRuptura | ProdutoEstoque) {
+  return toNumber(item.saldo_assu) > 0
 }
 
-function isMossoroOnly(item: ProdutoRuptura | ProdutoEstoque) {
-  return toNumber(item.saldo_mossoro) > 0 && toNumber(item.saldo_assu) <= 0
+function hasMossoroSaldo(item: ProdutoRuptura | ProdutoEstoque) {
+  return toNumber(item.saldo_mossoro) > 0
+}
+
+function hasMossoroPartageSaldo(item: ProdutoRuptura | ProdutoEstoque) {
+  return toNumber(item.saldo_mossoro_partage) > 0
 }
 
 function matchesSearch<T extends { nome_produto: string | null; codigo_modelo: string | null }>(item: T, term: string) {
@@ -335,17 +340,22 @@ const filteredRupturas = computed(() => {
 
     const assuZero = toNumber(item.saldo_assu) <= 0
     const mossoroZero = toNumber(item.saldo_mossoro) <= 0
+    const mossoroPartageZero = toNumber(item.saldo_mossoro_partage) <= 0
 
-    if (filters.value.localFalta === 'ambas') {
-      return assuZero && mossoroZero
+    if (filters.value.localFalta === 'todas') {
+      return assuZero && mossoroZero && mossoroPartageZero
     }
 
     if (filters.value.localFalta === 'assu') {
-      return assuZero && !mossoroZero
+      return assuZero
     }
 
     if (filters.value.localFalta === 'mossoro') {
-      return mossoroZero && !assuZero
+      return mossoroZero
+    }
+
+    if (filters.value.localFalta === 'mossoro_partage') {
+      return mossoroPartageZero
     }
 
     return true
@@ -360,31 +370,34 @@ const filteredRupturaDeposito = computed(() => {
       return false
     }
 
-    if (filters.value.localFalta === 'assu') return isAssuOnly(item)
-    if (filters.value.localFalta === 'mossoro') return isMossoroOnly(item)
+    if (filters.value.localFalta === 'assu') return hasAssuSaldo(item)
+    if (filters.value.localFalta === 'mossoro') return hasMossoroSaldo(item)
+    if (filters.value.localFalta === 'mossoro_partage') return hasMossoroPartageSaldo(item)
 
     return true
   })
 })
 
 function resolveRupturaLojaStatus(item: ProdutoRuptura) {
-  const assuZero = toNumber(item.saldo_assu) <= 0
-  const mossoroZero = toNumber(item.saldo_mossoro) <= 0
+  const lojasSemSaldo: string[] = []
 
-  if (assuZero && mossoroZero) return 'Critico'
-  if (assuZero) return 'Falta em Assu'
-  if (mossoroZero) return 'Falta em Mossoro'
+  if (toNumber(item.saldo_assu) <= 0) lojasSemSaldo.push('Assu')
+  if (toNumber(item.saldo_mossoro) <= 0) lojasSemSaldo.push('Mossoro Centro')
+  if (toNumber(item.saldo_mossoro_partage) <= 0) lojasSemSaldo.push('Mossoro Partage')
+
+  if (lojasSemSaldo.length === 3) return 'Critico'
+  if (lojasSemSaldo.length > 0) return `Falta em ${lojasSemSaldo.join(' + ')}`
   return 'Atencao'
 }
 
 function resolveRupturaDepositoStatus(item: ProdutoEstoque) {
-  const assu = toNumber(item.saldo_assu)
-  const mossoro = toNumber(item.saldo_mossoro)
+  const lojasComSaldo: string[] = []
 
-  if (assu > 0 && mossoro > 0) return 'Assu e Mossoro'
-  if (assu > 0) return 'Assu'
-  if (mossoro > 0) return 'Mossoro'
-  return '-'
+  if (toNumber(item.saldo_assu) > 0) lojasComSaldo.push('Assu')
+  if (toNumber(item.saldo_mossoro) > 0) lojasComSaldo.push('Mossoro Centro')
+  if (toNumber(item.saldo_mossoro_partage) > 0) lojasComSaldo.push('Mossoro Partage')
+
+  return lojasComSaldo.join(' + ') || '-'
 }
 
 const printableReport = computed<PrintableReport>(() => {
@@ -396,9 +409,10 @@ const printableReport = computed<PrintableReport>(() => {
         { key: 'produto', label: 'Produto', width: '38%' },
         { key: 'departamento', label: 'Departamento', width: '16%' },
         { key: 'deposito', label: 'Deposito', width: '8%', align: 'right' },
-        { key: 'assu', label: 'Assu', width: '8%', align: 'right' },
-        { key: 'mossoro', label: 'Mossoro', width: '8%', align: 'right' },
-        { key: 'status', label: 'Status', width: '10%' }
+        { key: 'assu', label: 'Assu', width: '7%', align: 'right' },
+        { key: 'mossoro', label: 'Mossoro Centro', width: '9%', align: 'right' },
+        { key: 'mossoroPartage', label: 'Mossoro Partage', width: '9%', align: 'right' },
+        { key: 'status', label: 'Status', width: '11%' }
       ],
       rows: filteredRupturas.value.map((item) => ({
         codigo: normalizeText(item.codigo_modelo),
@@ -407,6 +421,7 @@ const printableReport = computed<PrintableReport>(() => {
         deposito: formatPrintNumber(item.qtd_total_deposito),
         assu: formatPrintNumber(item.saldo_assu),
         mossoro: formatPrintNumber(item.saldo_mossoro),
+        mossoroPartage: formatPrintNumber(item.saldo_mossoro_partage),
         status: resolveRupturaLojaStatus(item)
       }))
     }
@@ -416,11 +431,12 @@ const printableReport = computed<PrintableReport>(() => {
     title: 'Relatorio de Ruptura no Deposito',
     columns: [
       { key: 'codigo', label: 'Codigo', width: '12%' },
-      { key: 'produto', label: 'Produto', width: '40%' },
-      { key: 'departamento', label: 'Departamento', width: '16%' },
-      { key: 'assu', label: 'Assu', width: '8%', align: 'right' },
-      { key: 'mossoro', label: 'Mossoro', width: '8%', align: 'right' },
-      { key: 'deposito', label: 'Deposito', width: '8%', align: 'right' },
+      { key: 'produto', label: 'Produto', width: '34%' },
+      { key: 'departamento', label: 'Departamento', width: '14%' },
+      { key: 'assu', label: 'Assu', width: '7%', align: 'right' },
+      { key: 'mossoro', label: 'Mossoro Centro', width: '9%', align: 'right' },
+      { key: 'mossoroPartage', label: 'Mossoro Partage', width: '9%', align: 'right' },
+      { key: 'deposito', label: 'Deposito', width: '7%', align: 'right' },
       { key: 'status', label: 'Status', width: '8%' }
     ],
     rows: filteredRupturaDeposito.value.map((item) => ({
@@ -429,6 +445,7 @@ const printableReport = computed<PrintableReport>(() => {
       departamento: normalizeText(item.departamento),
       assu: formatPrintNumber(item.saldo_assu),
       mossoro: formatPrintNumber(item.saldo_mossoro),
+      mossoroPartage: formatPrintNumber(item.saldo_mossoro_partage),
       deposito: formatPrintNumber(item.saldo_deposito),
       status: resolveRupturaDepositoStatus(item)
     }))
@@ -446,23 +463,30 @@ const activeCards = computed<KpiCardData[]>(() => {
         color: 'cyan'
       },
       {
-        title: 'Falta em ambas',
-        value: stats.value.ruptura.ambas,
-        description: 'Sem estoque em Assu e Mossoro.',
+        title: 'Falta em todas',
+        value: stats.value.ruptura.todas,
+        description: 'Sem estoque em Assu, Mossoro Centro e Mossoro Partage.',
         icon: 'alert-triangle',
         color: 'red'
       },
       {
-        title: 'So Assu',
+        title: 'Falta em Assu',
         value: stats.value.ruptura.assu,
-        description: 'Falta apenas em Assu.',
+        description: 'Itens sem estoque em Assu.',
         icon: 'info',
         color: 'amber'
       },
       {
-        title: 'So Mossoro',
+        title: 'Falta em Mossoro Centro',
         value: stats.value.ruptura.mossoro,
-        description: 'Falta apenas em Mossoro.',
+        description: 'Itens sem estoque em Mossoro Centro.',
+        icon: 'info',
+        color: 'slate'
+      },
+      {
+        title: 'Falta em Mossoro Partage',
+        value: stats.value.ruptura.mossoroPartage,
+        description: 'Itens sem estoque em Mossoro Partage.',
         icon: 'info',
         color: 'slate'
       }
@@ -485,9 +509,16 @@ const activeCards = computed<KpiCardData[]>(() => {
       color: 'amber'
     },
     {
-      title: 'Cobertura em Mossoro',
+      title: 'Cobertura em Mossoro Centro',
       value: stats.value.rupturaDeposito.mossoro,
-      description: 'Itens com saldo em Mossoro.',
+      description: 'Itens com saldo em Mossoro Centro.',
+      icon: 'info',
+      color: 'slate'
+    },
+    {
+      title: 'Cobertura em Mossoro Partage',
+      value: stats.value.rupturaDeposito.mossoroPartage,
+      description: 'Itens com saldo em Mossoro Partage.',
       icon: 'info',
       color: 'slate'
     },

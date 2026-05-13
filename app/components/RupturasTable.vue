@@ -18,7 +18,8 @@
             <th class="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Classificacao</th>
             <th class="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Deposito</th>
             <th class="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider bg-red-50/70">Assu</th>
-            <th class="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider bg-red-50/70">Mossoro</th>
+            <th class="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider bg-red-50/70">Mossoro Centro</th>
+            <th class="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider bg-red-50/70">Mossoro Partage</th>
             <th class="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
           </tr>
         </thead>
@@ -65,8 +66,16 @@
               <SaldoBadge :saldo="produto.saldo_mossoro" />
             </td>
 
+            <td class="px-6 py-4 text-center border-l border-slate-100">
+              <SaldoBadge :saldo="produto.saldo_mossoro_partage" />
+            </td>
+
             <td class="px-6 py-4 text-center">
-              <StatusBadge :saldo-assu="produto.saldo_assu" :saldo-mossoro="produto.saldo_mossoro" />
+              <StatusBadge
+                :saldo-assu="produto.saldo_assu"
+                :saldo-mossoro="produto.saldo_mossoro"
+                :saldo-mossoro-partage="produto.saldo_mossoro_partage"
+              />
             </td>
           </tr>
         </tbody>
@@ -124,13 +133,15 @@ const SaldoBadge = defineComponent({
 const StatusBadge = defineComponent({
   props: {
     saldoAssu: { type: [Number, String], default: 0 },
-    saldoMossoro: { type: [Number, String], default: 0 }
+    saldoMossoro: { type: [Number, String], default: 0 },
+    saldoMossoroPartage: { type: [Number, String], default: 0 }
   },
   setup(props) {
     return () => {
       const assu = toNumber(props.saldoAssu)
       const mossoro = toNumber(props.saldoMossoro)
-      const critico = assu <= 0 && mossoro <= 0
+      const mossoroPartage = toNumber(props.saldoMossoroPartage)
+      const critico = assu <= 0 && mossoro <= 0 && mossoroPartage <= 0
 
       if (critico) {
         return h('span', { class: 'inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-red-700 ring-1 ring-inset ring-red-300/70' }, [
