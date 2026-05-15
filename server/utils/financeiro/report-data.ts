@@ -127,7 +127,10 @@ function mapCreditoExtrato(row: ExtratoCreditoDiario): CreditoExtratoView {
 }
 
 function mapTituloPago(row: TituloFinanceiroResumo): TituloPagoView {
-  const valorPago = Math.max(toNumber(row.valor_baixa), toNumber(row.valor_pago))
+  const valorNominal = toNumber(row.valor_nominal)
+  const valorPago = valorNominal > 0
+    ? valorNominal
+    : Math.max(toNumber(row.valor_baixa), toNumber(row.valor_pago))
   const contaCaixaBanco = resolveContaCaixaBanco(row)
   const historico = row.historico?.trim() || row.origem_lancamento?.trim() || '--'
 
@@ -400,7 +403,7 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     error: titulosError
   } = await supabase
     .from(titulosTable)
-    .select('id,numero_titulo,sufixo,fornecedor,historico,origem_lancamento,complemento,forma_pagamento,conta_caixa,tipo_conta,situacao_titulo,data_baixa,data_ultimo_pagamento,data_vencimento,valor_pago,valor_baixa,valor_pendente,usuario_login')
+    .select('id,numero_titulo,sufixo,fornecedor,historico,origem_lancamento,complemento,forma_pagamento,conta_caixa,tipo_conta,situacao_titulo,data_baixa,data_ultimo_pagamento,data_vencimento,valor_nominal,valor_pago,valor_baixa,valor_pendente,usuario_login')
     .order('id', { ascending: false })
     .limit(15000)
 

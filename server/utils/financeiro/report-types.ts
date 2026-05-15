@@ -24,6 +24,7 @@ export interface TituloFinanceiroResumo {
   data_baixa: string | null
   data_ultimo_pagamento: string | null
   data_vencimento: string | null
+  valor_nominal: number | string | null
   valor_pago: number | string | null
   valor_baixa: number | string | null
   valor_pendente: number | string | null
