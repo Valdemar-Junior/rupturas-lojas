@@ -331,7 +331,52 @@
               <td class="px-3 py-2">{{ item.contaCaixaBanco }}</td>
               <td class="px-3 py-2">{{ item.formaPagamento }}</td>
               <td class="px-3 py-2">{{ formatDate(item.dataBaixa) }}</td>
-              <td class="px-3 py-2 text-right font-semibold text-rose-700">{{ formatCurrency(item.valorPago) }}</td>
+              <td class="px-3 py-2 text-right font-semibold text-rose-700">
+                <div class="flex items-center justify-end gap-2">
+                  <template v-if="editingTituloId === item.id && canEditPaidTitle(item)">
+                    <input
+                      v-model="editingValorPago"
+                      type="text"
+                      inputmode="decimal"
+                      class="w-28 rounded-lg border border-cyan-300 bg-white px-2 py-1 text-right text-sm text-slate-900 outline-none ring-2 ring-cyan-200/60"
+                      :disabled="savingTitulo"
+                      @keydown.enter.prevent="savePaidTitleEdit(item)"
+                      @keydown.esc.prevent="cancelPaidTitleEdit"
+                    >
+                    <button
+                      type="button"
+                      class="rounded-lg bg-cyan-600 px-2 py-1 text-[11px] font-semibold text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      :disabled="savingTitulo || !isValidCurrencyInput(editingValorPago)"
+                      @click="savePaidTitleEdit(item)"
+                    >
+                      {{ savingTitulo ? 'Salvando...' : 'Salvar' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      :disabled="savingTitulo"
+                      @click="cancelPaidTitleEdit"
+                    >
+                      Cancelar
+                    </button>
+                  </template>
+                  <template v-else>
+                    <span>{{ formatCurrency(item.valorPago) }}</span>
+                    <button
+                      v-if="canEditPaidTitle(item)"
+                      type="button"
+                      class="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-cyan-700"
+                      title="Editar valor pago"
+                      :disabled="savingTitulo"
+                      @click="startPaidTitleEdit(item)"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M16.862 4.487a1.875 1.875 0 112.652 2.651L8.25 18.403 4.5 19.5l1.097-3.75L16.862 4.487z" />
+                      </svg>
+                    </button>
+                  </template>
+                </div>
+              </td>
             </tr>
             <tr v-if="!report || report.titulosPagosNoDia.length === 0">
               <td colspan="10" class="px-3 py-8 text-center text-sm text-slate-500">Nenhum titulo pago encontrado.</td>
@@ -371,6 +416,13 @@
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section
+      v-if="titleEditError"
+      class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700"
+    >
+      {{ titleEditError }}
     </section>
   </div>
 </template>
@@ -458,6 +510,10 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const emailManualSendPending = ref(false)
 const emailMessage = ref('')
 const emailError = ref('')
+const editingTituloId = ref<number | string | null>(null)
+const editingValorPago = ref('')
+const savingTitulo = ref(false)
+const titleEditError = ref('')
 let reportRequestId = 0
 
 const flowSteps = [
@@ -651,6 +707,76 @@ function clearEmailFeedback() {
   emailError.value = ''
 }
 
+function canEditPaidTitle(item: TituloPago): boolean {
+  return item.tipoLancamento === 'titulo' && !groupPaidBySupplier.value
+}
+
+function startPaidTitleEdit(item: TituloPago) {
+  if (!canEditPaidTitle(item)) return
+  editingTituloId.value = item.id
+  editingValorPago.value = formatCurrencyInput(item.valorPago)
+  titleEditError.value = ''
+}
+
+function cancelPaidTitleEdit() {
+  editingTituloId.value = null
+  editingValorPago.value = ''
+  savingTitulo.value = false
+}
+
+function formatCurrencyInput(value: number): string {
+  return value.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
+}
+
+function parseCurrencyInput(value: string): number {
+  const normalized = String(value || '').trim().replace(/\./g, '').replace(',', '.')
+  return Number(normalized)
+}
+
+function isValidCurrencyInput(value: string): boolean {
+  const parsed = parseCurrencyInput(value)
+  return Number.isFinite(parsed) && parsed > 0
+}
+
+async function savePaidTitleEdit(item: TituloPago) {
+  if (!canEditPaidTitle(item)) return
+
+  const nextValorPago = parseCurrencyInput(editingValorPago.value)
+  if (!Number.isFinite(nextValorPago) || nextValorPago <= 0) {
+    titleEditError.value = 'Informe um valor pago valido antes de salvar.'
+    return
+  }
+
+  if (Math.abs(nextValorPago - item.valorPago) < 0.005) {
+    cancelPaidTitleEdit()
+    return
+  }
+
+  savingTitulo.value = true
+  titleEditError.value = ''
+
+  try {
+    await $fetch('/api/financeiro/relatorio/titulo', {
+      method: 'POST',
+      body: {
+        id: item.id,
+        valorPago: nextValorPago
+      }
+    })
+
+    cancelPaidTitleEdit()
+    await loadReport()
+  } catch (error: any) {
+    console.error(error)
+    titleEditError.value = error?.data?.statusMessage || error?.message || 'Falha ao salvar a alteracao do titulo.'
+  } finally {
+    savingTitulo.value = false
+  }
+}
+
 async function sendManualReportEmail() {
   if (!isValidIsoDate(selectedDate.value) || !isValidIsoDate(selectedPeriodStart.value) || !isValidIsoDate(selectedPeriodEnd.value)) {
     emailError.value = 'Datas invalidas para envio. Selecione datas validas.'
@@ -791,8 +917,10 @@ watch([selectedDate, selectedPeriodStart, selectedPeriodEnd, selectedConta, grou
   ) return
   uploadMessage.value = ''
   uploadError.value = ''
+  titleEditError.value = ''
   emailMessage.value = ''
   emailError.value = ''
+  cancelPaidTitleEdit()
   void loadReport()
 })
 
