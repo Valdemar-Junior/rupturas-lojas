@@ -5,12 +5,11 @@
     <header class="print-hide sticky top-0 z-40 border-b border-slate-200/70 bg-white/85 backdrop-blur-xl">
       <div class="mx-auto w-full max-w-[1760px] px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="h-11 w-11 rounded-xl bg-slate-900/95 ring-1 ring-slate-800/20 flex items-center justify-center">
-            <img src="/LOGONEW .png" alt="Logo Lojao" class="h-8 w-auto" />
+          <div class="flex h-12 items-center justify-center rounded-2xl bg-white/90 px-3 shadow-sm ring-1 ring-slate-200/80">
+            <img src="/LOGONEW .png" alt="Logo Lojao" class="h-9 w-auto object-contain" />
           </div>
           <div class="leading-tight">
-            <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Supply Intelligence</p>
-            <p class="text-sm font-semibold text-slate-900">Rupturas Lojao</p>
+            <p class="text-sm font-semibold text-slate-900">Painel de Gestao</p>
           </div>
         </div>
 
