@@ -36,6 +36,7 @@
             </NuxtLink>
             <NuxtLink
               to="/financeiro/titulos"
+              @click.prevent="handleFinanceiroClick"
               :class="[
                 'rounded-full px-3 py-1 text-xs font-semibold transition',
                 isFinanceiroRoute ? 'bg-slate-900 text-white' : 'text-slate-600 hover:text-slate-900'
@@ -59,11 +60,37 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 
 const route = useRoute()
+const router = useRouter()
+const { isUnlocked, syncFromSession, unlockWithPassword } = useFinanceiroAccess()
 
 const isRupturasRoute = computed(() => route.path === '/')
 const isTabelaPrecoRoute = computed(() => route.path.startsWith('/tabela-preco'))
 const isFinanceiroRoute = computed(() => route.path.startsWith('/financeiro'))
+
+onMounted(() => {
+  syncFromSession()
+})
+
+async function handleFinanceiroClick() {
+  if (isUnlocked.value) {
+    await router.push('/financeiro/titulos')
+    return
+  }
+
+  const password = window.prompt('Digite a senha de administrador para acessar o Financeiro:')
+
+  if (password === null) {
+    return
+  }
+
+  if (!unlockWithPassword(password)) {
+    window.alert('Senha incorreta. Acesso ao Financeiro negado.')
+    return
+  }
+
+  await router.push('/financeiro/titulos')
+}
 </script>
