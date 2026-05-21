@@ -20,6 +20,7 @@ import { getFinanceiroSupabaseServiceClient } from './supabase-service'
 const DEFAULT_EXTRATO_TABLE = 'extrato_creditos_diarios'
 const DEFAULT_TITULOS_TABLE = 'titulos_financeiros'
 const DEFAULT_TRANSFERENCIAS_TABLE = 'transferencias_bancarias'
+const SUPABASE_PAGE_SIZE = 1000
 
 function getConfiguredTable(name: 'extrato' | 'titulos' | 'transferencias'): string {
   if (name === 'extrato') {
@@ -114,6 +115,30 @@ function buildAvailableContas(...groups: Array<Array<string | null | undefined>>
   }
 
   return Array.from(entries.values()).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+}
+
+async function fetchAllTitulosRows(supabase: ReturnType<typeof getFinanceiroSupabaseServiceClient>, titulosTable: string) {
+  const rows: TituloFinanceiroResumo[] = []
+  let start = 0
+
+  while (true) {
+    const end = start + SUPABASE_PAGE_SIZE - 1
+    const { data, error } = await supabase
+      .from(titulosTable)
+      .select('id,numero_titulo,sufixo,fornecedor,historico,origem_lancamento,complemento,forma_pagamento,conta_caixa,tipo_conta,situacao_titulo,data_baixa,data_ultimo_pagamento,data_vencimento,valor_nominal,valor_pago,valor_baixa,valor_pendente,usuario_login')
+      .order('id', { ascending: false })
+      .range(start, end)
+
+    if (error) throw error
+
+    const batch = (data as TituloFinanceiroResumo[]) || []
+    rows.push(...batch)
+
+    if (batch.length < SUPABASE_PAGE_SIZE) break
+    start += SUPABASE_PAGE_SIZE
+  }
+
+  return rows
 }
 
 function mapCreditoExtrato(row: ExtratoCreditoDiario): CreditoExtratoView {
@@ -398,17 +423,11 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     transferenciasContaRows = (transferenciasContaData as Array<{ conta_origem: string | null; conta_destino: string | null }>) || []
   }
 
-  const {
-    data: titulosData,
-    error: titulosError
-  } = await supabase
-    .from(titulosTable)
-    .select('id,numero_titulo,sufixo,fornecedor,historico,origem_lancamento,complemento,forma_pagamento,conta_caixa,tipo_conta,situacao_titulo,data_baixa,data_ultimo_pagamento,data_vencimento,valor_nominal,valor_pago,valor_baixa,valor_pendente,usuario_login')
-    .order('id', { ascending: false })
-    .limit(15000)
-
-  if (titulosError) {
-    if (isMissingTableError(titulosError)) {
+  let titulosRows: TituloFinanceiroResumo[] = []
+  try {
+    titulosRows = await fetchAllTitulosRows(supabase, titulosTable)
+  } catch (error) {
+    if (isMissingTableError(error)) {
       throw createError({
         statusCode: 500,
         statusMessage: `Tabela "${titulosTable}" nao encontrada. Configure o armazenamento dos titulos no Supabase.`
@@ -417,11 +436,9 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
 
     throw createError({
       statusCode: 500,
-      statusMessage: mapSupabaseError(titulosError, 'Erro ao consultar titulos financeiros.')
+      statusMessage: mapSupabaseError(error, 'Erro ao consultar titulos financeiros.')
     })
   }
-
-  const titulosRows = (titulosData as TituloFinanceiroResumo[]) || []
   const contaSelecionadaKey = normalizeAccountKey(contaSelecionada)
 
   const availableContas = buildAvailableContas(

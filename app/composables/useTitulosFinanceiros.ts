@@ -125,6 +125,8 @@ export interface FinanceMonthlyPoint {
   nominal: number
 }
 
+const SUPABASE_PAGE_SIZE = 1000
+
 function toNumber(value: NumericLike): number {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0
   if (typeof value === 'string' && value.trim() !== '') {
@@ -825,20 +827,36 @@ export function useTitulosFinanceiros() {
     if (page.value > totalPages.value) page.value = totalPages.value
   })
 
+  async function fetchAllTitulos(): Promise<TituloFinanceiro[]> {
+    const allRows: TituloFinanceiro[] = []
+    let start = 0
+
+    while (true) {
+      const end = start + SUPABASE_PAGE_SIZE - 1
+      const { data, error: queryError } = await supabase
+        .from('titulos_financeiros')
+        .select('id,chave_unica,titulo_id,baixa_id,numero_titulo,sufixo,data_emissao,data_vencimento,data_ultimo_pagamento,valor_nominal,valor_pago,valor_pendente,complemento,situacao_titulo,fornecedor,tipo_titulo,forma_pagamento,data_baixa,valor_baixa,usuario_login,usuario_nome,origem_lancamento,tipo_movimento,conta_caixa,tipo_conta,historico,created_at,updated_at')
+        .order('data_vencimento', { ascending: false })
+        .range(start, end)
+
+      if (queryError) throw queryError
+
+      const batch = (data as TituloFinanceiro[]) || []
+      allRows.push(...batch)
+
+      if (batch.length < SUPABASE_PAGE_SIZE) break
+      start += SUPABASE_PAGE_SIZE
+    }
+
+    return allRows
+  }
+
   async function fetchData() {
     pending.value = true
     error.value = null
 
     try {
-      const { data, error: queryError } = await supabase
-        .from('titulos_financeiros')
-        .select('id,chave_unica,titulo_id,baixa_id,numero_titulo,sufixo,data_emissao,data_vencimento,data_ultimo_pagamento,valor_nominal,valor_pago,valor_pendente,complemento,situacao_titulo,fornecedor,tipo_titulo,forma_pagamento,data_baixa,valor_baixa,usuario_login,usuario_nome,origem_lancamento,tipo_movimento,conta_caixa,tipo_conta,historico,created_at,updated_at')
-        .order('data_vencimento', { ascending: false })
-        .limit(5000)
-
-      if (queryError) throw queryError
-
-      rows.value = (data as TituloFinanceiro[]) || []
+      rows.value = await fetchAllTitulos()
       updatedAt.value = new Date().toISOString()
     } catch (err: any) {
       console.error('Error fetching titulos_financeiros:', err)
