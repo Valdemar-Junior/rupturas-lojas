@@ -15,6 +15,7 @@ import {
   parseDate,
   toNumber
 } from './report-types'
+import { fetchExcludedTituloIds } from './report-title-exclusions'
 import { getFinanceiroSupabaseServiceClient } from './supabase-service'
 
 const DEFAULT_EXTRATO_TABLE = 'extrato_creditos_diarios'
@@ -439,6 +440,7 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
       statusMessage: mapSupabaseError(error, 'Erro ao consultar titulos financeiros.')
     })
   }
+  const excludedTituloIds = await fetchExcludedTituloIds()
   const contaSelecionadaKey = normalizeAccountKey(contaSelecionada)
 
   const availableContas = buildAvailableContas(
@@ -457,6 +459,7 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
   const filteredTitulosRows = contaSelecionadaKey
     ? titulosRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.conta_caixa, resolveContaCaixaBanco(row)))
     : titulosRows
+  const reportTitulosRows = filteredTitulosRows.filter((row) => !excludedTituloIds.has(Number(row.id)))
 
   const filteredTransferenciasRows = contaSelecionadaKey
     ? transferenciasRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.conta_origem))
@@ -483,7 +486,7 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     }
   }
 
-  const titulosPagosBase = filteredTitulosRows
+  const titulosPagosBase = reportTitulosRows
     .map(mapTituloPago)
     .filter((row) => {
       if (row.valorPago <= 0) return false
@@ -507,7 +510,7 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     ? aggregatePaidTitlesBySupplier(titulosPagosBase)
     : titulosPagosBase.sort((a, b) => b.valorPago - a.valorPago)
 
-  const titulosPendentesAteHoje = filteredTitulosRows
+  const titulosPendentesAteHoje = reportTitulosRows
     .map(mapTituloPendente)
     .filter((row) => {
       if (row.valorPendente <= 0) return false

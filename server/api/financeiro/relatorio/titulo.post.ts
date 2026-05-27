@@ -1,10 +1,13 @@
 import { createError, readBody } from 'h3'
+import { excludeTituloFromReport } from '~~/server/utils/financeiro/report-title-exclusions'
 import { getFinanceiroSupabaseServiceClient } from '~~/server/utils/financeiro/supabase-service'
 
 const DEFAULT_TITULOS_TABLE = 'titulos_financeiros'
 
 interface UpdateTituloBody {
   id?: number | string | null
+  action?: 'editar' | 'excluir' | string | null
+  motivo?: string | null
   valorPago?: number | string | null
 }
 
@@ -15,7 +18,6 @@ function getTitulosTable(): string {
 export default defineEventHandler(async (event) => {
   const body = (await readBody(event)) as UpdateTituloBody | null
   const id = Number(body?.id)
-  const valorRaw = body?.valorPago
 
   if (!Number.isInteger(id) || id <= 0) {
     throw createError({
@@ -23,6 +25,22 @@ export default defineEventHandler(async (event) => {
       statusMessage: 'Identificador do titulo invalido para edicao.'
     })
   }
+
+  const action = String(body?.action || 'editar').trim().toLowerCase()
+
+  if (action === 'excluir') {
+    await excludeTituloFromReport({
+      tituloId: id,
+      motivo: body?.motivo
+    })
+
+    return {
+      success: true,
+      message: 'Titulo excluido do relatorio com sucesso.'
+    }
+  }
+
+  const valorRaw = body?.valorPago
 
   const valorPago = typeof valorRaw === 'number'
     ? valorRaw

@@ -362,18 +362,33 @@
                   </template>
                   <template v-else>
                     <span>{{ formatCurrency(item.valorPago) }}</span>
-                    <button
-                      v-if="canEditPaidTitle(item)"
-                      type="button"
-                      class="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-cyan-700"
-                      title="Editar valor pago"
-                      :disabled="savingTitulo"
-                      @click="startPaidTitleEdit(item)"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M16.862 4.487a1.875 1.875 0 112.652 2.651L8.25 18.403 4.5 19.5l1.097-3.75L16.862 4.487z" />
-                      </svg>
-                    </button>
+                    <template v-if="canEditPaidTitle(item)">
+                      <button
+                        type="button"
+                        class="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-cyan-700"
+                        title="Editar valor pago"
+                        :disabled="savingTitulo || deletingTituloId === item.id"
+                        @click="startPaidTitleEdit(item)"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M16.862 4.487a1.875 1.875 0 112.652 2.651L8.25 18.403 4.5 19.5l1.097-3.75L16.862 4.487z" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        class="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-rose-50 hover:text-rose-700"
+                        title="Excluir titulo do relatorio"
+                        :disabled="savingTitulo || deletingTituloId === item.id"
+                        @click="deletePaidTitle(item)"
+                      >
+                        <svg v-if="deletingTituloId === item.id" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 12a8 8 0 018-8m0 0a8 8 0 018 8m-8-8v4" />
+                        </svg>
+                        <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M6 7h12m-9 0V5.75A1.75 1.75 0 0110.75 4h2.5A1.75 1.75 0 0115 5.75V7m-7 0v11.25A1.75 1.75 0 009.75 20h4.5A1.75 1.75 0 0016 18.25V7M10 10.5v6m4-6v6" />
+                        </svg>
+                      </button>
+                    </template>
                   </template>
                 </div>
               </td>
@@ -416,6 +431,13 @@
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section
+      v-if="titleActionMessage"
+      class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+    >
+      {{ titleActionMessage }}
     </section>
 
     <section
@@ -513,6 +535,8 @@ const emailError = ref('')
 const editingTituloId = ref<number | string | null>(null)
 const editingValorPago = ref('')
 const savingTitulo = ref(false)
+const deletingTituloId = ref<number | string | null>(null)
+const titleActionMessage = ref('')
 const titleEditError = ref('')
 let reportRequestId = 0
 
@@ -707,15 +731,20 @@ function clearEmailFeedback() {
   emailError.value = ''
 }
 
+function clearTitleFeedback() {
+  titleActionMessage.value = ''
+  titleEditError.value = ''
+}
+
 function canEditPaidTitle(item: TituloPago): boolean {
   return item.tipoLancamento === 'titulo' && !groupPaidBySupplier.value
 }
 
 function startPaidTitleEdit(item: TituloPago) {
   if (!canEditPaidTitle(item)) return
+  clearTitleFeedback()
   editingTituloId.value = item.id
   editingValorPago.value = formatCurrencyInput(item.valorPago)
-  titleEditError.value = ''
 }
 
 function cancelPaidTitleEdit() {
@@ -756,7 +785,7 @@ async function savePaidTitleEdit(item: TituloPago) {
   }
 
   savingTitulo.value = true
-  titleEditError.value = ''
+  clearTitleFeedback()
 
   try {
     await $fetch('/api/financeiro/relatorio/titulo', {
@@ -768,12 +797,50 @@ async function savePaidTitleEdit(item: TituloPago) {
     })
 
     cancelPaidTitleEdit()
+    titleActionMessage.value = 'Valor pago atualizado com sucesso.'
     await loadReport()
   } catch (error: any) {
     console.error(error)
     titleEditError.value = error?.data?.statusMessage || error?.message || 'Falha ao salvar a alteracao do titulo.'
   } finally {
     savingTitulo.value = false
+  }
+}
+
+async function deletePaidTitle(item: TituloPago) {
+  if (!canEditPaidTitle(item)) return
+
+  const confirmed = window.confirm(
+    `Confirma a exclusao do titulo ${item.numeroTitulo} deste relatorio?\n\n` +
+    'Ao confirmar, esse titulo nao aparecera mais nos relatorios enviados por e-mail.'
+  )
+
+  if (!confirmed) return
+
+  deletingTituloId.value = item.id
+  clearTitleFeedback()
+
+  try {
+    await $fetch('/api/financeiro/relatorio/titulo', {
+      method: 'POST',
+      body: {
+        id: item.id,
+        action: 'excluir',
+        motivo: 'Excluido manualmente na tabela de titulos pagos do relatorio diario.'
+      }
+    })
+
+    if (editingTituloId.value === item.id) {
+      cancelPaidTitleEdit()
+    }
+
+    titleActionMessage.value = `Titulo ${item.numeroTitulo} excluido do relatorio com sucesso.`
+    await loadReport()
+  } catch (error: any) {
+    console.error(error)
+    titleEditError.value = error?.data?.statusMessage || error?.message || 'Falha ao excluir o titulo do relatorio.'
+  } finally {
+    deletingTituloId.value = null
   }
 }
 

@@ -39,6 +39,7 @@ Configure no projeto da Vercel:
 - `RELATORIO_EXTRATO_TABLE` (opcional, default: `extrato_creditos_diarios`)
 - `RELATORIO_EXTRATO_FILE_TABLE` (opcional, default: `extrato_arquivos_diarios`)
 - `RELATORIO_TITULOS_TABLE` (opcional, default: `titulos_financeiros`)
+- `RELATORIO_TITULOS_EXCLUIDOS_TABLE` (opcional, default: `relatorio_titulos_excluidos`)
 - `RELATORIO_EMAIL_CONFIG_TABLE` (opcional, default: `relatorio_email_configuracoes`)
 - `CRON_SECRET` (usado automaticamente pela Vercel no header Authorization)
 - `REPORT_MANUAL_TOKEN` (opcional, para PDF/disparo manual)
@@ -115,6 +116,20 @@ create table if not exists public.relatorio_email_configuracoes (
 
 create index if not exists idx_relatorio_email_configuracoes_updated_at
   on public.relatorio_email_configuracoes (updated_at desc);
+```
+
+## Tabela de titulos excluidos do relatorio (SQL)
+
+```sql
+create table if not exists public.relatorio_titulos_excluidos (
+  titulo_id bigint primary key,
+  motivo text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_relatorio_titulos_excluidos_updated_at
+  on public.relatorio_titulos_excluidos (updated_at desc);
 ```
 
 ## Endpoints
