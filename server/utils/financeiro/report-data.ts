@@ -22,6 +22,13 @@ const DEFAULT_EXTRATO_TABLE = 'extrato_creditos_diarios'
 const DEFAULT_TITULOS_TABLE = 'titulos_financeiros'
 const DEFAULT_TRANSFERENCIAS_TABLE = 'transferencias_bancarias'
 const SUPABASE_PAGE_SIZE = 1000
+const ACCOUNT_OPTIONS_CACHE_TTL_MS = 10 * 60 * 1000
+
+type ContaCaixaRow = Pick<TituloFinanceiroResumo, 'conta_caixa' | 'tipo_conta'>
+type ExtratoContaRow = Pick<ExtratoCreditoDiario, 'banco'>
+type TransferenciaContaRow = Pick<TransferenciaBancariaResumo, 'conta_origem' | 'conta_destino'>
+
+const accountOptionsCache = new Map<string, { expiresAt: number; values: string[] }>()
 
 function getConfiguredTable(name: 'extrato' | 'titulos' | 'transferencias'): string {
   if (name === 'extrato') {
@@ -71,6 +78,13 @@ function endOfDay(date: Date): Date {
   return copy
 }
 
+function getNextIsoDate(value: string): string {
+  const parsed = parseDate(value)
+  if (!parsed) return value
+  parsed.setDate(parsed.getDate() + 1)
+  return parsed.toISOString().slice(0, 10)
+}
+
 function normalizeAccountKey(value: string | null | undefined): string {
   return normalizeText(value, '')
     .normalize('NFD')
@@ -118,21 +132,13 @@ function buildAvailableContas(...groups: Array<Array<string | null | undefined>>
   return Array.from(entries.values()).sort((a, b) => a.localeCompare(b, 'pt-BR'))
 }
 
-async function fetchAllTitulosRows(supabase: ReturnType<typeof getFinanceiroSupabaseServiceClient>, titulosTable: string) {
-  const rows: TituloFinanceiroResumo[] = []
+async function fetchPaginatedRows<T>(loadBatch: (start: number, end: number) => Promise<T[]>): Promise<T[]> {
+  const rows: T[] = []
   let start = 0
 
   while (true) {
     const end = start + SUPABASE_PAGE_SIZE - 1
-    const { data, error } = await supabase
-      .from(titulosTable)
-      .select('id,numero_titulo,sufixo,fornecedor,historico,origem_lancamento,complemento,forma_pagamento,conta_caixa,tipo_conta,situacao_titulo,data_baixa,data_ultimo_pagamento,data_vencimento,valor_nominal,valor_pago,valor_baixa,valor_pendente,usuario_login')
-      .order('id', { ascending: false })
-      .range(start, end)
-
-    if (error) throw error
-
-    const batch = (data as TituloFinanceiroResumo[]) || []
+    const batch = await loadBatch(start, end)
     rows.push(...batch)
 
     if (batch.length < SUPABASE_PAGE_SIZE) break
@@ -140,6 +146,133 @@ async function fetchAllTitulosRows(supabase: ReturnType<typeof getFinanceiroSupa
   }
 
   return rows
+}
+
+async function fetchPaidTitulosRows(
+  supabase: ReturnType<typeof getFinanceiroSupabaseServiceClient>,
+  titulosTable: string,
+  periodoTitulosInicio: string,
+  periodoTitulosFim: string
+) {
+  const nextDay = getNextIsoDate(periodoTitulosFim)
+  const [rowsWithBaixa, rowsWithUltimoPagamento] = await Promise.all([
+    fetchPaginatedRows<TituloFinanceiroResumo>(async (start, end) => {
+      const { data, error } = await supabase
+        .from(titulosTable)
+        .select('id,numero_titulo,sufixo,fornecedor,historico,origem_lancamento,complemento,forma_pagamento,conta_caixa,tipo_conta,data_baixa,data_ultimo_pagamento,valor_nominal,valor_pago,valor_baixa,usuario_login')
+        .gte('data_baixa', periodoTitulosInicio)
+        .lt('data_baixa', nextDay)
+        .order('id', { ascending: false })
+        .range(start, end)
+
+      if (error) throw error
+      return (data as TituloFinanceiroResumo[]) || []
+    }),
+    fetchPaginatedRows<TituloFinanceiroResumo>(async (start, end) => {
+      const { data, error } = await supabase
+        .from(titulosTable)
+        .select('id,numero_titulo,sufixo,fornecedor,historico,origem_lancamento,complemento,forma_pagamento,conta_caixa,tipo_conta,data_baixa,data_ultimo_pagamento,valor_nominal,valor_pago,valor_baixa,usuario_login')
+        .is('data_baixa', null)
+        .gte('data_ultimo_pagamento', periodoTitulosInicio)
+        .lt('data_ultimo_pagamento', nextDay)
+        .order('id', { ascending: false })
+        .range(start, end)
+
+      if (error) throw error
+      return (data as TituloFinanceiroResumo[]) || []
+    })
+  ])
+
+  const merged = new Map<number, TituloFinanceiroResumo>()
+  for (const row of [...rowsWithBaixa, ...rowsWithUltimoPagamento]) {
+    merged.set(Number(row.id), row)
+  }
+
+  return Array.from(merged.values()).sort((a, b) => Number(b.id) - Number(a.id))
+}
+
+async function fetchPendingTitulosRows(
+  supabase: ReturnType<typeof getFinanceiroSupabaseServiceClient>,
+  titulosTable: string,
+  periodoTitulosFim: string
+) {
+  const nextDay = getNextIsoDate(periodoTitulosFim)
+  return fetchPaginatedRows<TituloFinanceiroResumo>(async (start, end) => {
+    const { data, error } = await supabase
+      .from(titulosTable)
+      .select('id,numero_titulo,fornecedor,conta_caixa,tipo_conta,situacao_titulo,data_vencimento,valor_pendente')
+      .gt('valor_pendente', 0)
+      .or(`data_vencimento.lt.${nextDay},data_vencimento.is.null`)
+      .order('id', { ascending: false })
+      .range(start, end)
+
+    if (error) throw error
+    return (data as TituloFinanceiroResumo[]) || []
+  })
+}
+
+async function fetchTituloAccountRows(
+  supabase: ReturnType<typeof getFinanceiroSupabaseServiceClient>,
+  titulosTable: string
+) {
+  return fetchPaginatedRows<ContaCaixaRow>(async (start, end) => {
+    const { data, error } = await supabase
+      .from(titulosTable)
+      .select('conta_caixa,tipo_conta')
+      .order('id', { ascending: false })
+      .range(start, end)
+
+    if (error) throw error
+    return (data as ContaCaixaRow[]) || []
+  })
+}
+
+async function fetchExtratoAccountRows(
+  supabase: ReturnType<typeof getFinanceiroSupabaseServiceClient>,
+  extratoTable: string
+) {
+  return fetchPaginatedRows<ExtratoContaRow>(async (start, end) => {
+    const { data, error } = await supabase
+      .from(extratoTable)
+      .select('banco')
+      .order('id', { ascending: false })
+      .range(start, end)
+
+    if (error) throw error
+    return (data as ExtratoContaRow[]) || []
+  })
+}
+
+async function fetchTransferenciaAccountRows(
+  supabase: ReturnType<typeof getFinanceiroSupabaseServiceClient>,
+  transferenciasTable: string
+) {
+  return fetchPaginatedRows<TransferenciaContaRow>(async (start, end) => {
+    const { data, error } = await supabase
+      .from(transferenciasTable)
+      .select('conta_origem,conta_destino')
+      .order('id', { ascending: false })
+      .range(start, end)
+
+    if (error) throw error
+    return (data as TransferenciaContaRow[]) || []
+  })
+}
+
+async function getCachedAccountOptions(cacheKey: string, loader: () => Promise<string[]>) {
+  const cached = accountOptionsCache.get(cacheKey)
+  const now = Date.now()
+
+  if (cached && cached.expiresAt > now) {
+    return cached.values
+  }
+
+  const values = await loader()
+  accountOptionsCache.set(cacheKey, {
+    values,
+    expiresAt: now + ACCOUNT_OPTIONS_CACHE_TTL_MS
+  })
+  return values
 }
 
 function mapCreditoExtrato(row: ExtratoCreditoDiario): CreditoExtratoView {
@@ -332,8 +465,6 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
 
   let extratoRows: ExtratoCreditoDiario[] = []
   let transferenciasRows: TransferenciaBancariaResumo[] = []
-  let extratoContaRows: Array<{ banco: string | null }> = []
-  let transferenciasContaRows: Array<{ conta_origem: string | null; conta_destino: string | null }> = []
 
   const {
     data: extratoData,
@@ -356,18 +487,6 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     }
   } else {
     extratoRows = (extratoData as ExtratoCreditoDiario[]) || []
-  }
-
-  const {
-    data: extratoContaData,
-    error: extratoContaError
-  } = await supabase
-    .from(extratoTable)
-    .select('banco')
-    .limit(10000)
-
-  if (!extratoContaError) {
-    extratoContaRows = (extratoContaData as Array<{ banco: string | null }>) || []
   }
 
   if (periodoTitulosInicio === periodoTitulosFim) {
@@ -412,21 +531,13 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     }
   }
 
-  const {
-    data: transferenciasContaData,
-    error: transferenciasContaError
-  } = await supabase
-    .from(transferenciasTable)
-    .select('conta_origem,conta_destino')
-    .limit(10000)
-
-  if (!transferenciasContaError) {
-    transferenciasContaRows = (transferenciasContaData as Array<{ conta_origem: string | null; conta_destino: string | null }>) || []
-  }
-
-  let titulosRows: TituloFinanceiroResumo[] = []
+  let paidTitulosRows: TituloFinanceiroResumo[] = []
+  let pendingTitulosRows: TituloFinanceiroResumo[] = []
   try {
-    titulosRows = await fetchAllTitulosRows(supabase, titulosTable)
+    ;[paidTitulosRows, pendingTitulosRows] = await Promise.all([
+      fetchPaidTitulosRows(supabase, titulosTable, periodoTitulosInicio, periodoTitulosFim),
+      fetchPendingTitulosRows(supabase, titulosTable, periodoTitulosFim)
+    ])
   } catch (error) {
     if (isMissingTableError(error)) {
       throw createError({
@@ -440,15 +551,31 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
       statusMessage: mapSupabaseError(error, 'Erro ao consultar titulos financeiros.')
     })
   }
-  const excludedTituloIds = await fetchExcludedTituloIds()
+  const [excludedTituloIds, titleAccountOptions, extratoAccountOptions, transferenciaAccountOptions] = await Promise.all([
+    fetchExcludedTituloIds(),
+    getCachedAccountOptions(`titulos:${titulosTable}`, async () => {
+      const rows = await fetchTituloAccountRows(supabase, titulosTable)
+      return buildAvailableContas(
+        rows
+          .filter((row) => isBancoAccountType(row.tipo_conta))
+          .map((row) => resolveContaCaixaBanco(row))
+      )
+    }).catch(() => []),
+    getCachedAccountOptions(`extrato:${extratoTable}`, async () => {
+      const rows = await fetchExtratoAccountRows(supabase, extratoTable)
+      return buildAvailableContas(rows.map((row) => row.banco || ''))
+    }).catch(() => []),
+    getCachedAccountOptions(`transferencias:${transferenciasTable}`, async () => {
+      const rows = await fetchTransferenciaAccountRows(supabase, transferenciasTable)
+      return buildAvailableContas(rows.map((row) => row.conta_origem || ''))
+    }).catch(() => [])
+  ])
   const contaSelecionadaKey = normalizeAccountKey(contaSelecionada)
 
   const availableContas = buildAvailableContas(
-    titulosRows
-      .filter((row) => isBancoAccountType(row.tipo_conta))
-      .map((row) => resolveContaCaixaBanco(row)),
-    extratoContaRows.map((row) => row.banco || ''),
-    transferenciasContaRows.map((row) => row.conta_origem || ''),
+    titleAccountOptions,
+    extratoAccountOptions,
+    transferenciaAccountOptions,
     contaSelecionada ? [contaSelecionada] : []
   )
 
@@ -456,10 +583,15 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     ? extratoRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.banco))
     : extratoRows
 
-  const filteredTitulosRows = contaSelecionadaKey
-    ? titulosRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.conta_caixa, resolveContaCaixaBanco(row)))
-    : titulosRows
-  const reportTitulosRows = filteredTitulosRows.filter((row) => !excludedTituloIds.has(Number(row.id)))
+  const filteredPaidTitulosRows = contaSelecionadaKey
+    ? paidTitulosRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.conta_caixa, resolveContaCaixaBanco(row)))
+    : paidTitulosRows
+  const filteredPendingTitulosRows = contaSelecionadaKey
+    ? pendingTitulosRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.conta_caixa, resolveContaCaixaBanco(row)))
+    : pendingTitulosRows
+
+  const reportPaidTitulosRows = filteredPaidTitulosRows.filter((row) => !excludedTituloIds.has(Number(row.id)))
+  const reportPendingTitulosRows = filteredPendingTitulosRows.filter((row) => !excludedTituloIds.has(Number(row.id)))
 
   const filteredTransferenciasRows = contaSelecionadaKey
     ? transferenciasRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.conta_origem))
@@ -486,7 +618,7 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     }
   }
 
-  const titulosPagosBase = reportTitulosRows
+  const titulosPagosBase = reportPaidTitulosRows
     .map(mapTituloPago)
     .filter((row) => {
       if (row.valorPago <= 0) return false
@@ -510,7 +642,7 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     ? aggregatePaidTitlesBySupplier(titulosPagosBase)
     : titulosPagosBase.sort((a, b) => b.valorPago - a.valorPago)
 
-  const titulosPendentesAteHoje = reportTitulosRows
+  const titulosPendentesAteHoje = reportPendingTitulosRows
     .map(mapTituloPendente)
     .filter((row) => {
       if (row.valorPendente <= 0) return false

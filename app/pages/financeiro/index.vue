@@ -1,3 +1,3 @@
 <script setup lang="ts">
-await navigateTo('/financeiro/titulos', { replace: true })
+await navigateTo('/financeiro/relatorio-diario', { replace: true })
 </script>

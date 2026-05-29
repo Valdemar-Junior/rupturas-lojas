@@ -34,7 +34,7 @@
               Tabela de Preco
             </NuxtLink>
             <NuxtLink
-              to="/financeiro/titulos"
+              to="/financeiro/relatorio-diario"
               @click.prevent="handleFinanceiroClick"
               :class="[
                 'rounded-full px-4 py-2 text-sm font-semibold transition-all duration-200',
@@ -71,7 +71,7 @@ onMounted(() => {
 
 async function handleFinanceiroClick() {
   if (isUnlocked.value) {
-    await router.push('/financeiro/titulos')
+    await router.push('/financeiro/relatorio-diario')
     return
   }
 
@@ -86,6 +86,6 @@ async function handleFinanceiroClick() {
     return
   }
 
-  await router.push('/financeiro/titulos')
+  await router.push('/financeiro/relatorio-diario')
 }
 </script>

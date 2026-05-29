@@ -6,7 +6,7 @@
       <div class="absolute -right-14 -top-10 h-44 w-44 rounded-full bg-cyan-300/20 blur-3xl"></div>
       <div class="absolute -left-10 -bottom-14 h-44 w-44 rounded-full bg-orange-200/20 blur-3xl"></div>
 
-      <div class="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+      <div class="relative flex flex-col gap-5">
         <div class="max-w-3xl">
           <p class="text-xs uppercase tracking-[0.22em] text-cyan-100/90">Financeiro Diario</p>
           <h1 class="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">Relatorio automatico de receita e pagamentos</h1>
@@ -53,6 +53,30 @@
               <option v-for="option in accountOptions" :key="option" :value="option">{{ option }}</option>
             </select>
           </label>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <p
+            v-if="hasPendingReportChanges"
+            class="text-sm text-cyan-100/90"
+          >
+            Filtros alterados. Clique em consultar para atualizar os dados renderizados.
+          </p>
+          <p
+            v-else
+            class="text-sm text-cyan-100/75"
+          >
+            Ajuste data, periodo e conta antes de consultar.
+          </p>
+
+          <button
+            type="button"
+            class="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="pending || !canQueryReport"
+            @click="applyReportFilters"
+          >
+            {{ pending ? 'Consultando...' : 'Consultar' }}
+          </button>
         </div>
       </div>
     </section>
@@ -450,7 +474,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import FinanceiroNavTabs from '~/components/financeiro/FinanceiroNavTabs.vue'
 
 type Credito = {
@@ -538,6 +562,13 @@ const savingTitulo = ref(false)
 const deletingTituloId = ref<number | string | null>(null)
 const titleActionMessage = ref('')
 const titleEditError = ref('')
+const lastAppliedFilters = ref({
+  selectedDate: selectedDate.value,
+  selectedPeriodStart: selectedPeriodStart.value,
+  selectedPeriodEnd: selectedPeriodEnd.value,
+  selectedConta: selectedConta.value,
+  groupPaidBySupplier: groupPaidBySupplier.value
+})
 let reportRequestId = 0
 
 const flowSteps = [
@@ -569,6 +600,20 @@ const saldoClass = computed(() => {
 })
 
 const accountOptions = computed(() => report.value?.availableContas || [])
+const canQueryReport = computed(() => (
+  isValidIsoDate(selectedDate.value) &&
+  isValidIsoDate(selectedPeriodStart.value) &&
+  isValidIsoDate(selectedPeriodEnd.value) &&
+  selectedPeriodStart.value <= selectedPeriodEnd.value
+))
+
+const hasPendingReportChanges = computed(() => (
+  selectedDate.value !== lastAppliedFilters.value.selectedDate ||
+  selectedPeriodStart.value !== lastAppliedFilters.value.selectedPeriodStart ||
+  selectedPeriodEnd.value !== lastAppliedFilters.value.selectedPeriodEnd ||
+  selectedConta.value !== lastAppliedFilters.value.selectedConta ||
+  groupPaidBySupplier.value !== lastAppliedFilters.value.groupPaidBySupplier
+))
 
 function getTodayInputDate(): string {
   const now = new Date()
@@ -679,6 +724,13 @@ async function loadReport() {
 
     if (currentRequestId !== reportRequestId) return
     report.value = response.data
+    lastAppliedFilters.value = {
+      selectedDate: selectedDate.value,
+      selectedPeriodStart: selectedPeriodStart.value,
+      selectedPeriodEnd: selectedPeriodEnd.value,
+      selectedConta: selectedConta.value,
+      groupPaidBySupplier: groupPaidBySupplier.value
+    }
   } catch (error: any) {
     if (currentRequestId !== reportRequestId) return
     console.error(error)
@@ -693,6 +745,16 @@ async function loadReport() {
   if (currentRequestId === reportRequestId) {
     await loadPersistedExtrato()
   }
+}
+
+function applyReportFilters() {
+  uploadMessage.value = ''
+  uploadError.value = ''
+  clearTitleFeedback()
+  clearEmailFeedback()
+  cancelPaidTitleEdit()
+  persistedExtratoInfo.value = null
+  void loadReport()
 }
 
 function buildReportQuery() {
@@ -969,27 +1031,6 @@ async function uploadExtrato() {
     uploadPending.value = false
   }
 }
-
-watch([selectedDate, selectedPeriodStart, selectedPeriodEnd, selectedConta, groupPaidBySupplier], ([dateValue, periodStart, periodEnd, contaValue, agruparValue], [previousDate, previousPeriodStart, previousPeriodEnd, previousConta, previousAgrupar]) => {
-  if (
-    (dateValue === previousDate &&
-      periodStart === previousPeriodStart &&
-      periodEnd === previousPeriodEnd &&
-      contaValue === previousConta &&
-      agruparValue === previousAgrupar) ||
-    !isValidIsoDate(dateValue) ||
-    !isValidIsoDate(periodStart) ||
-    !isValidIsoDate(periodEnd) ||
-    periodStart > periodEnd
-  ) return
-  uploadMessage.value = ''
-  uploadError.value = ''
-  titleEditError.value = ''
-  emailMessage.value = ''
-  emailError.value = ''
-  cancelPaidTitleEdit()
-  void loadReport()
-})
 
 onMounted(() => {
   void loadReport()

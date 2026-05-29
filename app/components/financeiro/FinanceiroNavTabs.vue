@@ -23,10 +23,6 @@ const route = useRoute()
 
 const tabs = [
   {
-    to: '/financeiro/titulos',
-    label: 'Titulos financeiros'
-  },
-  {
     to: '/financeiro/relatorio-diario',
     label: 'Relatorio diario'
   },
