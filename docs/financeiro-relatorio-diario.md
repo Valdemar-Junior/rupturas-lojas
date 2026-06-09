@@ -38,6 +38,7 @@ Configure no projeto da Vercel:
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RELATORIO_EXTRATO_TABLE` (opcional, default: `extrato_creditos_diarios`)
 - `RELATORIO_EXTRATO_FILE_TABLE` (opcional, default: `extrato_arquivos_diarios`)
+- `RELATORIO_EXTRATO_AJUSTES_TABLE` (opcional, default: `relatorio_extrato_ajustes`)
 - `RELATORIO_TITULOS_TABLE` (opcional, default: `titulos_financeiros`)
 - `RELATORIO_TITULOS_EXCLUIDOS_TABLE` (opcional, default: `relatorio_titulos_excluidos`)
 - `RELATORIO_EMAIL_CONFIG_TABLE` (opcional, default: `relatorio_email_configuracoes`)
@@ -94,6 +95,32 @@ alter table public.extrato_arquivos_diarios
 
 create index if not exists idx_extrato_arquivos_diarios_updated_at
   on public.extrato_arquivos_diarios (updated_at desc);
+```
+
+## Tabela de ajustes manuais do extrato (SQL)
+
+```sql
+create table if not exists public.relatorio_extrato_ajustes (
+  adjustment_key text primary key,
+  assinatura text not null,
+  data_referencia date not null,
+  banco text not null,
+  data_movimento date,
+  descricao text,
+  documento text,
+  valor_original numeric(14,2) not null,
+  valor_editado numeric(14,2),
+  excluido boolean not null default false,
+  motivo text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_relatorio_extrato_ajustes_data_ref
+  on public.relatorio_extrato_ajustes (data_referencia, banco);
+
+create index if not exists idx_relatorio_extrato_ajustes_updated_at
+  on public.relatorio_extrato_ajustes (updated_at desc);
 ```
 
 ## Tabela de configuracao de e-mail (SQL)

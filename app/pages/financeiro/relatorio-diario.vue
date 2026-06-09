@@ -270,19 +270,78 @@
               <th class="px-3 py-2">Descricao</th>
               <th class="px-3 py-2">Documento</th>
               <th class="px-3 py-2">Banco</th>
+              <th class="px-3 py-2 text-right">Valor original</th>
               <th class="px-3 py-2 text-right">Valor</th>
+              <th class="px-3 py-2 text-right">Acoes</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-200">
-            <tr v-for="item in report?.creditosExtrato || []" :key="`${item.dataMovimento}-${item.descricao}-${item.valor}`">
+            <tr v-for="item in report?.creditosExtrato || []" :key="item.adjustmentKey">
               <td class="px-3 py-2">{{ formatDate(item.dataMovimento) }}</td>
               <td class="px-3 py-2">{{ item.descricao }}</td>
               <td class="px-3 py-2">{{ item.documento }}</td>
               <td class="px-3 py-2">{{ item.banco }}</td>
-              <td class="px-3 py-2 text-right font-semibold text-emerald-700">{{ formatCurrency(item.valor) }}</td>
+              <td class="px-3 py-2 text-right" :class="item.ajustadoManual ? 'text-slate-400 line-through' : 'font-semibold text-emerald-700'">
+                {{ formatCurrency(item.valorOriginal) }}
+              </td>
+              <td class="px-3 py-2 text-right font-semibold text-emerald-700">
+                <div class="flex items-center justify-end gap-2">
+                  <template v-if="editingCreditoKey === item.adjustmentKey">
+                    <input
+                      v-model="editingCreditoValor"
+                      type="text"
+                      inputmode="decimal"
+                      class="w-28 rounded-lg border border-cyan-300 bg-white px-2 py-1 text-right text-sm text-slate-900 outline-none ring-2 ring-cyan-200/60"
+                      @keydown.enter.prevent="saveExtratoCreditEdit(item)"
+                      @keydown.esc.prevent="cancelExtratoCreditEdit"
+                    >
+                    <button
+                      type="button"
+                      class="rounded-lg bg-cyan-600 px-2 py-1 text-[11px] font-semibold text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      :disabled="savingCredito"
+                      @click="saveExtratoCreditEdit(item)"
+                    >
+                      Salvar
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100"
+                      :disabled="savingCredito"
+                      @click="cancelExtratoCreditEdit"
+                    >
+                      Cancelar
+                    </button>
+                  </template>
+                  <template v-else>
+                    <span :class="item.ajustadoManual ? 'text-amber-700' : 'text-emerald-700'">
+                      {{ formatCurrency(item.valor) }}
+                    </span>
+                  </template>
+                </div>
+              </td>
+              <td class="px-3 py-2">
+                <div class="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    class="rounded-lg border border-cyan-200 bg-cyan-50 px-2 py-1 text-[11px] font-semibold text-cyan-700 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    :disabled="savingCredito || deletingCreditoKey === item.adjustmentKey"
+                    @click="startExtratoCreditEdit(item)"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    class="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    :disabled="savingCredito || deletingCreditoKey === item.adjustmentKey"
+                    @click="deleteExtratoCredit(item)"
+                  >
+                    Excluir
+                  </button>
+                </div>
+              </td>
             </tr>
             <tr v-if="!report || report.creditosExtrato.length === 0">
-              <td colspan="5" class="px-3 py-8 text-center text-sm text-slate-500">Nenhum credito encontrado.</td>
+              <td colspan="7" class="px-3 py-8 text-center text-sm text-slate-500">Nenhum credito encontrado.</td>
             </tr>
           </tbody>
         </table>
@@ -478,11 +537,15 @@ import { computed, onMounted, ref } from 'vue'
 import FinanceiroNavTabs from '~/components/financeiro/FinanceiroNavTabs.vue'
 
 type Credito = {
+  adjustmentKey: string
+  ocorrenciaIndex: number
   dataMovimento: string | null
   descricao: string
   documento: string
   banco: string
+  valorOriginal: number
   valor: number
+  ajustadoManual: boolean
 }
 
 type TituloPago = {
@@ -560,6 +623,10 @@ const editingTituloId = ref<number | string | null>(null)
 const editingValorPago = ref('')
 const savingTitulo = ref(false)
 const deletingTituloId = ref<number | string | null>(null)
+const editingCreditoKey = ref<string | null>(null)
+const editingCreditoValor = ref('')
+const savingCredito = ref(false)
+const deletingCreditoKey = ref<string | null>(null)
 const titleActionMessage = ref('')
 const titleEditError = ref('')
 const lastAppliedFilters = ref({
@@ -753,6 +820,7 @@ function applyReportFilters() {
   clearTitleFeedback()
   clearEmailFeedback()
   cancelPaidTitleEdit()
+  cancelExtratoCreditEdit()
   persistedExtratoInfo.value = null
   void loadReport()
 }
@@ -798,6 +866,19 @@ function clearTitleFeedback() {
   titleEditError.value = ''
 }
 
+function startExtratoCreditEdit(item: Credito) {
+  clearTitleFeedback()
+  cancelPaidTitleEdit()
+  editingCreditoKey.value = item.adjustmentKey
+  editingCreditoValor.value = formatCurrencyInput(item.valor)
+}
+
+function cancelExtratoCreditEdit() {
+  editingCreditoKey.value = null
+  editingCreditoValor.value = ''
+  savingCredito.value = false
+}
+
 function canEditPaidTitle(item: TituloPago): boolean {
   return item.tipoLancamento === 'titulo' && !groupPaidBySupplier.value
 }
@@ -805,6 +886,7 @@ function canEditPaidTitle(item: TituloPago): boolean {
 function startPaidTitleEdit(item: TituloPago) {
   if (!canEditPaidTitle(item)) return
   clearTitleFeedback()
+  cancelExtratoCreditEdit()
   editingTituloId.value = item.id
   editingValorPago.value = formatCurrencyInput(item.valorPago)
 }
@@ -903,6 +985,90 @@ async function deletePaidTitle(item: TituloPago) {
     titleEditError.value = error?.data?.statusMessage || error?.message || 'Falha ao excluir o titulo do relatorio.'
   } finally {
     deletingTituloId.value = null
+  }
+}
+
+async function saveExtratoCreditEdit(item: Credito) {
+  const nextValor = parseCurrencyInput(editingCreditoValor.value)
+  if (!Number.isFinite(nextValor) || nextValor <= 0) {
+    titleEditError.value = 'Informe um valor valido antes de salvar o credito do extrato.'
+    return
+  }
+
+  if (Math.abs(nextValor - item.valor) < 0.005) {
+    cancelExtratoCreditEdit()
+    return
+  }
+
+  savingCredito.value = true
+  clearTitleFeedback()
+
+  try {
+    await $fetch('/api/financeiro/relatorio/extrato', {
+      method: 'POST',
+      body: {
+        action: 'editar',
+        dataReferencia: selectedDate.value,
+        banco: item.banco,
+        dataMovimento: item.dataMovimento,
+        descricao: item.descricao,
+        documento: item.documento,
+        valorOriginal: item.valorOriginal,
+        valorEditado: nextValor,
+        ocorrenciaIndex: item.ocorrenciaIndex,
+        motivo: 'Valor ajustado manualmente na tabela de creditos do relatorio diario.'
+      }
+    })
+
+    cancelExtratoCreditEdit()
+    titleActionMessage.value = 'Valor do credito do extrato atualizado com sucesso.'
+    await loadReport()
+  } catch (error: any) {
+    console.error(error)
+    titleEditError.value = error?.data?.statusMessage || error?.message || 'Falha ao salvar a alteracao do credito do extrato.'
+  } finally {
+    savingCredito.value = false
+  }
+}
+
+async function deleteExtratoCredit(item: Credito) {
+  const confirmed = window.confirm(
+    `Confirma a exclusao do credito "${item.descricao}" deste relatorio?\n\n` +
+    'Ao confirmar, esse credito nao aparecera mais nos relatorios enviados por e-mail, mesmo se o extrato for reenviado.'
+  )
+
+  if (!confirmed) return
+
+  deletingCreditoKey.value = item.adjustmentKey
+  clearTitleFeedback()
+
+  try {
+    await $fetch('/api/financeiro/relatorio/extrato', {
+      method: 'POST',
+      body: {
+        action: 'excluir',
+        dataReferencia: selectedDate.value,
+        banco: item.banco,
+        dataMovimento: item.dataMovimento,
+        descricao: item.descricao,
+        documento: item.documento,
+        valorOriginal: item.valorOriginal,
+        ocorrenciaIndex: item.ocorrenciaIndex,
+        motivo: 'Excluido manualmente na tabela de creditos do relatorio diario.'
+      }
+    })
+
+    if (editingCreditoKey.value === item.adjustmentKey) {
+      cancelExtratoCreditEdit()
+    }
+
+    titleActionMessage.value = 'Credito do extrato excluido do relatorio com sucesso.'
+    await loadReport()
+  } catch (error: any) {
+    console.error(error)
+    titleEditError.value = error?.data?.statusMessage || error?.message || 'Falha ao excluir o credito do extrato.'
+  } finally {
+    deletingCreditoKey.value = null
   }
 }
 

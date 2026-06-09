@@ -42,11 +42,16 @@ export interface TransferenciaBancariaResumo {
 }
 
 export interface CreditoExtratoView {
+  adjustmentKey: string
+  ocorrenciaIndex: number
   dataMovimento: string | null
   descricao: string
   documento: string
   banco: string
+  valorOriginal: number
   valor: number
+  ajustadoManual: boolean
+  excluidoManual?: boolean
 }
 
 export interface TituloPagoView {

@@ -15,6 +15,10 @@ import {
   parseDate,
   toNumber
 } from './report-types'
+import {
+  annotateExtratoRowsWithAdjustmentKey,
+  fetchExtratoAdjustments
+} from './report-extrato-adjustments'
 import { fetchExcludedTituloIds } from './report-title-exclusions'
 import { getFinanceiroSupabaseServiceClient } from './supabase-service'
 
@@ -275,13 +279,21 @@ async function getCachedAccountOptions(cacheKey: string, loader: () => Promise<s
   return values
 }
 
-function mapCreditoExtrato(row: ExtratoCreditoDiario): CreditoExtratoView {
+function mapCreditoExtrato(
+  row: ExtratoCreditoDiario & { adjustmentKey: string; ocorrenciaIndex: number },
+  valor: number,
+  ajustadoManual: boolean
+): CreditoExtratoView {
   return {
+    adjustmentKey: row.adjustmentKey,
+    ocorrenciaIndex: row.ocorrenciaIndex,
     dataMovimento: row.data_movimento,
     descricao: normalizeText(row.descricao),
     documento: normalizeText(row.documento),
     banco: normalizeText(row.banco, 'Conta principal'),
-    valor: toNumber(row.valor)
+    valorOriginal: toNumber(row.valor),
+    valor,
+    ajustadoManual
   }
 }
 
@@ -551,8 +563,9 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
       statusMessage: mapSupabaseError(error, 'Erro ao consultar titulos financeiros.')
     })
   }
-  const [excludedTituloIds, titleAccountOptions, extratoAccountOptions, transferenciaAccountOptions] = await Promise.all([
+  const [excludedTituloIds, extratoAdjustments, titleAccountOptions, extratoAccountOptions, transferenciaAccountOptions] = await Promise.all([
     fetchExcludedTituloIds(),
+    fetchExtratoAdjustments(),
     getCachedAccountOptions(`titulos:${titulosTable}`, async () => {
       const rows = await fetchTituloAccountRows(supabase, titulosTable)
       return buildAvailableContas(
@@ -579,9 +592,11 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     contaSelecionada ? [contaSelecionada] : []
   )
 
-  const filteredExtratoRows = contaSelecionadaKey
-    ? extratoRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.banco))
-    : extratoRows
+  const annotatedExtratoRows = annotateExtratoRowsWithAdjustmentKey(
+    contaSelecionadaKey
+      ? extratoRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.banco))
+      : extratoRows
+  )
 
   const filteredPaidTitulosRows = contaSelecionadaKey
     ? paidTitulosRows.filter((row) => matchesContaSelecionada(contaSelecionadaKey, row.conta_caixa, resolveContaCaixaBanco(row)))
@@ -652,9 +667,18 @@ export async function buildDailyFinanceReportData(options: BuildDailyFinanceRepo
     })
     .sort((a, b) => b.valorPendente - a.valorPendente)
 
-  const creditosExtrato = filteredExtratoRows
-    .map(mapCreditoExtrato)
-    .filter((row) => row.valor > 0)
+  const creditosExtrato = annotatedExtratoRows
+    .map((row) => {
+      const adjustment = extratoAdjustments.get(row.adjustmentKey)
+      if (adjustment?.excluido) return null
+
+      const valorOriginal = toNumber(row.valor)
+      const valor = adjustment?.valorEditado ?? valorOriginal
+      if (valor <= 0) return null
+
+      return mapCreditoExtrato(row, valor, adjustment?.valorEditado !== null && adjustment?.valorEditado !== undefined)
+    })
+    .filter((row): row is CreditoExtratoView => !!row)
 
   const totalCreditosExtrato = creditosExtrato.reduce((sum, row) => sum + row.valor, 0)
   const totalTitulosPagosNoDia = titulosPagosNoDia.reduce((sum, row) => sum + row.valorPago, 0)
