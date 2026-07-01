@@ -406,7 +406,51 @@
           <tbody class="divide-y divide-slate-200">
             <tr v-for="item in report?.titulosPagosNoDia || []" :key="item.id">
               <td class="px-3 py-2">{{ item.numeroTitulo }}</td>
-              <td class="px-3 py-2">{{ item.parcela }}</td>
+              <td class="px-3 py-2">
+                <div class="flex items-center gap-2">
+                  <template v-if="editingParcelaTituloId === item.id && canEditPaidTitle(item)">
+                    <input
+                      v-model="editingParcela"
+                      type="text"
+                      class="w-20 rounded-lg border border-cyan-300 bg-white px-2 py-1 text-sm text-slate-900 outline-none ring-2 ring-cyan-200/60"
+                      :disabled="savingTitulo"
+                      @keydown.enter.prevent="savePaidTitleParcelaEdit(item)"
+                      @keydown.esc.prevent="cancelPaidTitleParcelaEdit"
+                    >
+                    <button
+                      type="button"
+                      class="rounded-lg bg-cyan-600 px-2 py-1 text-[11px] font-semibold text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      :disabled="savingTitulo || !isValidParcelaInput(editingParcela)"
+                      @click="savePaidTitleParcelaEdit(item)"
+                    >
+                      {{ savingTitulo ? 'Salvando...' : 'Salvar' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      :disabled="savingTitulo"
+                      @click="cancelPaidTitleParcelaEdit"
+                    >
+                      Cancelar
+                    </button>
+                  </template>
+                  <template v-else>
+                    <span>{{ item.parcela }}</span>
+                    <button
+                      v-if="canEditPaidTitle(item)"
+                      type="button"
+                      class="inline-flex h-6 w-6 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-cyan-700"
+                      title="Editar parcela"
+                      :disabled="savingTitulo || deletingTituloId === item.id"
+                      @click="startPaidTitleParcelaEdit(item)"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M16.862 4.487a1.875 1.875 0 112.652 2.651L8.25 18.403 4.5 19.5l1.097-3.75L16.862 4.487z" />
+                      </svg>
+                    </button>
+                  </template>
+                </div>
+              </td>
               <td class="px-3 py-2">{{ item.fornecedor }}</td>
               <td class="px-3 py-2">{{ item.historico }}</td>
               <td class="px-3 py-2">{{ item.usuarioLogin }}</td>
@@ -621,6 +665,8 @@ const emailMessage = ref('')
 const emailError = ref('')
 const editingTituloId = ref<number | string | null>(null)
 const editingValorPago = ref('')
+const editingParcelaTituloId = ref<number | string | null>(null)
+const editingParcela = ref('')
 const savingTitulo = ref(false)
 const deletingTituloId = ref<number | string | null>(null)
 const editingCreditoKey = ref<string | null>(null)
@@ -820,6 +866,7 @@ function applyReportFilters() {
   clearTitleFeedback()
   clearEmailFeedback()
   cancelPaidTitleEdit()
+  cancelPaidTitleParcelaEdit()
   cancelExtratoCreditEdit()
   persistedExtratoInfo.value = null
   void loadReport()
@@ -887,6 +934,7 @@ function startPaidTitleEdit(item: TituloPago) {
   if (!canEditPaidTitle(item)) return
   clearTitleFeedback()
   cancelExtratoCreditEdit()
+  cancelPaidTitleParcelaEdit()
   editingTituloId.value = item.id
   editingValorPago.value = formatCurrencyInput(item.valorPago)
 }
@@ -894,6 +942,21 @@ function startPaidTitleEdit(item: TituloPago) {
 function cancelPaidTitleEdit() {
   editingTituloId.value = null
   editingValorPago.value = ''
+  savingTitulo.value = false
+}
+
+function startPaidTitleParcelaEdit(item: TituloPago) {
+  if (!canEditPaidTitle(item)) return
+  clearTitleFeedback()
+  cancelExtratoCreditEdit()
+  cancelPaidTitleEdit()
+  editingParcelaTituloId.value = item.id
+  editingParcela.value = item.parcela
+}
+
+function cancelPaidTitleParcelaEdit() {
+  editingParcelaTituloId.value = null
+  editingParcela.value = ''
   savingTitulo.value = false
 }
 
@@ -912,6 +975,14 @@ function parseCurrencyInput(value: string): number {
 function isValidCurrencyInput(value: string): boolean {
   const parsed = parseCurrencyInput(value)
   return Number.isFinite(parsed) && parsed > 0
+}
+
+function normalizeParcelaInput(value: string): string {
+  return String(value || '').trim()
+}
+
+function isValidParcelaInput(value: string): boolean {
+  return normalizeParcelaInput(value).length > 0
 }
 
 async function savePaidTitleEdit(item: TituloPago) {
@@ -951,6 +1022,43 @@ async function savePaidTitleEdit(item: TituloPago) {
   }
 }
 
+async function savePaidTitleParcelaEdit(item: TituloPago) {
+  if (!canEditPaidTitle(item)) return
+
+  const nextParcela = normalizeParcelaInput(editingParcela.value)
+  if (!nextParcela) {
+    titleEditError.value = 'Informe uma parcela valida antes de salvar.'
+    return
+  }
+
+  if (nextParcela === item.parcela) {
+    cancelPaidTitleParcelaEdit()
+    return
+  }
+
+  savingTitulo.value = true
+  clearTitleFeedback()
+
+  try {
+    await $fetch('/api/financeiro/relatorio/titulo', {
+      method: 'POST',
+      body: {
+        id: item.id,
+        parcela: nextParcela
+      }
+    })
+
+    cancelPaidTitleParcelaEdit()
+    titleActionMessage.value = 'Parcela atualizada com sucesso.'
+    await loadReport()
+  } catch (error: any) {
+    console.error(error)
+    titleEditError.value = error?.data?.statusMessage || error?.message || 'Falha ao salvar a alteracao da parcela.'
+  } finally {
+    savingTitulo.value = false
+  }
+}
+
 async function deletePaidTitle(item: TituloPago) {
   if (!canEditPaidTitle(item)) return
 
@@ -976,6 +1084,10 @@ async function deletePaidTitle(item: TituloPago) {
 
     if (editingTituloId.value === item.id) {
       cancelPaidTitleEdit()
+    }
+
+    if (editingParcelaTituloId.value === item.id) {
+      cancelPaidTitleParcelaEdit()
     }
 
     titleActionMessage.value = `Titulo ${item.numeroTitulo} excluido do relatorio com sucesso.`

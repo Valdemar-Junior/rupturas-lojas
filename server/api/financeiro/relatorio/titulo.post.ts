@@ -9,6 +9,7 @@ interface UpdateTituloBody {
   action?: 'editar' | 'excluir' | string | null
   motivo?: string | null
   valorPago?: number | string | null
+  parcela?: string | number | null
 }
 
 function getTitulosTable(): string {
@@ -40,13 +41,25 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  const parcela = String(body?.parcela ?? '').trim()
   const valorRaw = body?.valorPago
+  const hasValorPago = valorRaw !== undefined && valorRaw !== null && String(valorRaw).trim() !== ''
+  const hasParcela = parcela.length > 0
 
-  const valorPago = typeof valorRaw === 'number'
-    ? valorRaw
-    : Number(String(valorRaw || '').trim().replace(/\./g, '').replace(',', '.'))
+  if (!hasValorPago && !hasParcela) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Informe um valor pago ou uma parcela valida para salvar a alteracao.'
+    })
+  }
 
-  if (!Number.isFinite(valorPago) || valorPago <= 0) {
+  const valorPago = hasValorPago
+    ? (typeof valorRaw === 'number'
+        ? valorRaw
+        : Number(String(valorRaw || '').trim().replace(/\./g, '').replace(',', '.')))
+    : null
+
+  if (hasValorPago && (!Number.isFinite(valorPago) || Number(valorPago) <= 0)) {
     throw createError({
       statusCode: 400,
       statusMessage: 'Informe um valor pago valido para salvar a alteracao.'
@@ -55,16 +68,23 @@ export default defineEventHandler(async (event) => {
 
   const supabase = getFinanceiroSupabaseServiceClient()
   const titulosTable = getTitulosTable()
+  const updatePayload: Record<string, string | number> = {}
+
+  if (hasParcela) {
+    updatePayload.sufixo = parcela
+  }
+
+  if (hasValorPago && valorPago !== null) {
+    updatePayload.valor_nominal = valorPago
+    updatePayload.valor_pago = valorPago
+    updatePayload.valor_baixa = valorPago
+  }
 
   const { data, error } = await supabase
     .from(titulosTable)
-    .update({
-      valor_nominal: valorPago,
-      valor_pago: valorPago,
-      valor_baixa: valorPago
-    })
+    .update(updatePayload)
     .eq('id', id)
-    .select('id,valor_nominal,valor_pago,valor_baixa')
+    .select('id,sufixo,valor_nominal,valor_pago,valor_baixa')
     .single()
 
   if (error) {
@@ -83,9 +103,14 @@ export default defineEventHandler(async (event) => {
 
   return {
     success: true,
-    message: 'Valor pago do titulo atualizado com sucesso.',
+    message: hasParcela && hasValorPago
+      ? 'Titulo atualizado com sucesso.'
+      : hasParcela
+        ? 'Parcela do titulo atualizada com sucesso.'
+        : 'Valor pago do titulo atualizado com sucesso.',
     data: {
       id: data.id,
+      parcela: data.sufixo,
       valorPago: data.valor_nominal ?? data.valor_baixa ?? data.valor_pago
     }
   }
